@@ -3,22 +3,22 @@
      Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
      For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
 <robot
-  name="E1-PRO_EVT2.0_V9_260714">
+  name="E1-PRO_EVT2.0_V12_260730">
   <link
     name="base_link">
     <inertial>
       <origin
-        xyz="-0.078128 -0.030482 0.38808"
+        xyz="-0.10133 0.00050345 1.811"
         rpy="0 0 0" />
       <mass
-        value="32.049" />
+        value="472.28" />
       <inertia
-        ixx="1.1271"
-        ixy="0.0019051"
-        ixz="-0.001577"
-        iyy="0.63017"
-        iyz="0.00040475"
-        izz="0.73273" />
+        ixx="491.67"
+        ixy="-3.2459E-05"
+        ixz="0.10753"
+        iyy="491.76"
+        iyz="0.0013991"
+        izz="2.7913" />
     </inertial>
     <visual>
       <origin
@@ -26,12 +26,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/base_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/base_link.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.48627 0.6549 0.55686 1" />
+          rgba="0.92157 0.63529 0.7451 1" />
       </material>
     </visual>
     <collision>
@@ -40,25 +40,25 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/base_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/base_link.STL" />
       </geometry>
     </collision>
   </link>
   <link
-    name="paltform_link">
+    name="platform_link">
     <inertial>
       <origin
-        xyz="0.20827 -0.031009 0.27747"
+        xyz="0.076062 0.11151 1.3066"
         rpy="0 0 0" />
       <mass
-        value="3.8818" />
+        value="34.753" />
       <inertia
-        ixx="0.044311"
-        ixy="-3.0252E-06"
-        ixz="0.00025311"
-        iyy="0.025099"
-        iyz="-1.8932E-07"
-        izz="0.066624" />
+        ixx="0.40542"
+        ixy="-5.8606E-07"
+        ixz="-0.0089709"
+        iyy="0.62626"
+        iyz="3.6497E-07"
+        izz="0.47787" />
     </inertial>
     <visual>
       <origin
@@ -66,12 +66,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/paltform_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/platform_link.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.81961 0.56863 0.52549 1" />
+          rgba="0.63922 0.2 0.7451 1" />
       </material>
     </visual>
     <collision>
@@ -80,7 +80,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/paltform_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/platform_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -93,12 +93,12 @@
     <parent
       link="base_link" />
     <child
-      link="paltform_link" />
+      link="platform_link" />
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-0.1"
-      upper="0.5"
+      lower="-1"
+      upper="1"
       effort="0"
       velocity="0" />
   </joint>
@@ -106,17 +106,17 @@
     name="arm_base_link">
     <inertial>
       <origin
-        xyz="-2.4233E-10 8.9488E-05 0.034349"
+        xyz="-2.582E-05 -8.4725E-05 0.035177"
         rpy="0 0 0" />
       <mass
-        value="0.59585" />
+        value="4.7258" />
       <inertia
-        ixx="0.00065407"
-        ixy="2.6305E-11"
-        ixz="-4.8472E-14"
-        iyy="0.00065679"
-        iyz="1.7428E-06"
-        izz="0.00065081" />
+        ixx="0.00543"
+        ixy="5.9447E-06"
+        ixz="-3.9261E-06"
+        iyy="0.0054476"
+        iyz="-1.2883E-05"
+        izz="0.0052996" />
     </inertial>
     <visual>
       <origin
@@ -124,12 +124,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/arm_base_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/arm_base_link.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="0.31765 0.24706 0.42353 1" />
       </material>
     </visual>
     <collision>
@@ -138,7 +138,7 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/arm_base_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/arm_base_link.STL" />
       </geometry>
     </collision>
   </link>
@@ -146,10 +146,10 @@
     name="arm_base_joint"
     type="fixed">
     <origin
-      xyz="0.51352 -0.031 0.31"
-      rpy="0 0 0" />
+      xyz="0.1145 0.2905 1.5345"
+      rpy="0 0 -1.5707963" />
     <parent
-      link="paltform_link" />
+      link="platform_link" />
     <child
       link="arm_base_link" />
     <axis
@@ -159,17 +159,17 @@
     name="Link1_L">
     <inertial>
       <origin
-        xyz="-1.8545E-06 0.0016783 0.15066"
+        xyz="0.00002347 0.00557150 -0.03075998"
         rpy="0 0 0" />
       <mass
-        value="0.81851" />
+        value="1.9705" />
       <inertia
-        ixx="0.0017226"
-        ixy="1.4268E-08"
-        ixz="-1.4275E-08"
-        iyy="0.0020384"
-        iyz="-3.2748E-05"
-        izz="0.00088868" />
+        ixx="0.00492293"
+        ixy="0.00000550"
+        ixz="0.00000193"
+        iyy="0.00526513"
+        iyz="0.00033232"
+        izz="0.00188107" />
     </inertial>
     <visual>
       <origin
@@ -177,12 +177,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link1_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link1_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="0 1 0 1" />
       </material>
     </visual>
     <collision>
@@ -191,15 +191,15 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link1_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link1_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint1_J"
+    name="Joint1_L"
     type="revolute">
     <origin
-      xyz="0 0 0"
+      xyz="0 0 0.1745"
       rpy="0 0 0" />
     <parent
       link="arm_base_link" />
@@ -208,26 +208,26 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.9671"
-      upper="2.9671"
-      effort="0"
-      velocity="0" />
+      lower="-3.1067"
+      upper="3.1067"
+      effort="108"
+      velocity="3.1416" />
   </joint>
   <link
     name="Link2_L">
     <inertial>
       <origin
-        xyz="-1.4456E-07 -0.0015137 0.047716"
+        xyz="0.00013483 0.06170460 0.00950639"
         rpy="0 0 0" />
       <mass
-        value="1.1465" />
+        value="2.24398" />
       <inertia
-        ixx="0.0054128"
-        ixy="8.1654E-08"
-        ixz="-2.3374E-08"
-        iyy="0.0045323"
-        iyz="-8.2729E-05"
-        izz="0.002352" />
+        ixx="0.01194933"
+        ixy="0.00000336"
+        ixz="0.00000091"
+        iyy="0.00361581"
+        iyz="-0.00132804"
+        izz="0.01098356" />
     </inertial>
     <visual>
       <origin
@@ -235,12 +235,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link2_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link2_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="0 0 1 1" />
       </material>
     </visual>
     <collision>
@@ -249,43 +249,43 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link2_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link2_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint2_J"
+    name="Joint2_L"
     type="revolute">
     <origin
-      xyz="0 0 0.1745"
-      rpy="0 0 0" />
+      xyz="0 0 0"
+      rpy="1.5708 0 0" />
     <parent
       link="Link1_L" />
     <child
       link="Link2_L" />
     <axis
-      xyz="0 1 0" />
+      xyz="0 0 1" />
     <limit
       lower="-2.0944"
       upper="2.0944"
-      effort="0"
-      velocity="0" />
+      effort="108"
+      velocity="3.1416" />
   </joint>
   <link
     name="Link3_L">
     <inertial>
       <origin
-        xyz="-0.023535 2.5028E-07 0.1338"
+        xyz="0.00968562 0.00246599 -0.04627302"
         rpy="0 0 0" />
       <mass
-        value="1.859" />
+        value="1.9242" />
       <inertia
-        ixx="0.012962"
-        ixy="-4.4589E-08"
-        ixz="0.0044136"
-        iyy="0.016023"
-        iyz="3.9752E-08"
-        izz="0.0045949" />
+        ixx="0.00718224"
+        ixy="0.00004413"
+        ixz="0.00089552"
+        iyy="0.00762563"
+        iyz="0.00022096"
+        izz="0.00178597" />
     </inertial>
     <visual>
       <origin
@@ -293,12 +293,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link3_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link3_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="1 0 0 1" />
       </material>
     </visual>
     <collision>
@@ -307,16 +307,16 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link3_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link3_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint3_J"
+    name="Joint3_L"
     type="revolute">
     <origin
-      xyz="0 0 0.1485"
-      rpy="0 0 0" />
+      xyz="0 0.287 0"
+      rpy="-1.5708 0 0" />
     <parent
       link="Link2_L" />
     <child
@@ -324,26 +324,26 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.9671"
-      upper="2.9671"
-      effort="0"
-      velocity="0" />
+      lower="-3.1067"
+      upper="3.1067"
+      effort="66"
+      velocity="3.1416" />
   </joint>
   <link
     name="Link4_L">
     <inertial>
       <origin
-        xyz="0.0077613 0.0048207 0.037399"
+        xyz="0.00850411 -0.04718223 0.00941509"
         rpy="0 0 0" />
       <mass
-        value="0.80083" />
+        value="1.6085" />
       <inertia
-        ixx="0.0027058"
-        ixy="9.7745E-06"
-        ixz="-0.00028207"
-        iyy="0.0022185"
-        iyz="4.7057E-05"
-        izz="0.0014374" />
+        ixx="0.00580480"
+        ixy="-0.00066669"
+        ixz="-0.00012722"
+        iyy="0.00223807"
+        iyz="0.00070523"
+        izz="0.00533060" />
     </inertial>
     <visual>
       <origin
@@ -351,12 +351,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link4_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link4_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="0 1 0 1" />
       </material>
     </visual>
     <collision>
@@ -365,43 +365,43 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link4_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link4_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint4_J"
+    name="Joint4_L"
     type="revolute">
     <origin
-      xyz="-0.096769 0 0.23962"
-      rpy="0 0 0" />
+      xyz="0.018 0 0"
+      rpy="-1.5708 0 3.1416" />
     <parent
       link="Link3_L" />
     <child
       link="Link4_L" />
     <axis
-      xyz="0 1 0" />
+      xyz="0 0 1" />
     <limit
-      lower="-3.1416"
-      upper="1.047197"
-      effort="0"
-      velocity="0" />
+      lower="-2.5307"
+      upper="1.0472"
+      effort="66"
+      velocity="3.1416" />
   </joint>
   <link
     name="Link5_L">
     <inertial>
       <origin
-        xyz="-6.78E-07 3.2217E-05 0.13822"
+        xyz="0.00051127 0.00101064 -0.11271739"
         rpy="0 0 0" />
       <mass
-        value="1.6879" />
+        value="2.0883" />
       <inertia
-        ixx="0.011022"
-        ixy="5.6855E-08"
-        ixz="-3.3182E-07"
-        iyy="0.010501"
-        iyz="-8.1575E-06"
-        izz="0.0020745" />
+        ixx="0.00626603"
+        ixy="0.00004009"
+        ixz="0.00005338"
+        iyy="0.00564387"
+        iyz="-0.00006193"
+        izz="0.00243632" />
     </inertial>
     <visual>
       <origin
@@ -409,12 +409,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link5_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link5_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="0 0 1 1" />
       </material>
     </visual>
     <collision>
@@ -423,16 +423,16 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link5_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link5_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint5_J"
+    name="Joint5_L"
     type="revolute">
     <origin
-      xyz="0.018 0.00325 0.1215"
-      rpy="0 0 0" />
+      xyz="0.018 -0.314 0"
+      rpy="-1.5708 0 3.1416" />
     <parent
       link="Link4_L" />
     <child
@@ -440,26 +440,26 @@
     <axis
       xyz="0 0 1" />
     <limit
-      lower="-2.9671"
-      upper="2.9671"
-      effort="0"
-      velocity="0" />
+      lower="-3.1067"
+      upper="3.1067"
+      effort="18"
+      velocity="3.1416" />
   </joint>
   <link
     name="Link6_L">
     <inertial>
       <origin
-        xyz="0.004049 3.3359E-08 -1.2591E-07"
+        xyz="0.00032659 0.00531336 -0.00030182"
         rpy="0 0 0" />
       <mass
-        value="0.28617" />
+        value="0.72496" />
       <inertia
-        ixx="0.00021745"
-        ixy="3.4379E-11"
-        ixz="6.5972E-10"
-        iyy="0.00018866"
-        iyz="3.9715E-10"
-        izz="0.00020199" />
+        ixx="0.00046040"
+        ixy="0.00000189"
+        ixz="0.00000083"
+        iyy="0.00051716"
+        iyz="-0.00000346"
+        izz="0.00042521" />
     </inertial>
     <visual>
       <origin
@@ -467,12 +467,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link6_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link6_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="1 0 0 1" />
       </material>
     </visual>
     <collision>
@@ -481,43 +481,43 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link6_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link6_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint6_J"
+    name="Joint6_L"
     type="revolute">
     <origin
-      xyz="0 0 0.2925"
-      rpy="0 0 0" />
+      xyz="0 0 0"
+      rpy="1.5708 -1.5708 0" />
     <parent
       link="Link5_L" />
     <child
       link="Link6_L" />
     <axis
-      xyz="0 1 0" />
+      xyz="0 0 1" />
     <limit
       lower="-1.0472"
       upper="1.0472"
-      effort="0"
-      velocity="0" />
+      effort="18"
+      velocity="3.1416" />
   </joint>
   <link
     name="Link7_L">
     <inertial>
       <origin
-        xyz="-0.0031171 7.5484E-05 0.040026"
+        xyz="-0.00009108 -0.03153255 0.00889371"
         rpy="0 0 0" />
       <mass
-        value="0.33604" />
+        value="0.68606" />
       <inertia
-        ixx="0.00068247"
-        ixy="-6.7262E-08"
-        ixz="-4.078E-05"
-        iyy="0.00089842"
-        iyz="-1.0527E-06"
-        izz="0.0004406" />
+        ixx="0.00173687"
+        ixy="-0.00000345"
+        ixz="-0.00000116"
+        iyy="0.00089035"
+        iyz="0.00030680"
+        izz="0.00139406" />
     </inertial>
     <visual>
       <origin
@@ -525,12 +525,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link7_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link7_L.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.79216 0.81961 0.93333 1" />
+          rgba="0 1 0 1" />
       </material>
     </visual>
     <collision>
@@ -539,43 +539,43 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/Link7_L.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/Link7_L.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="Joint7_J"
+    name="Joint7_L"
     type="revolute">
     <origin
       xyz="0 0 0"
-      rpy="0 0 0" />
+      rpy="1.5708 -1.5708 0" />
     <parent
       link="Link6_L" />
     <child
       link="Link7_L" />
     <axis
-      xyz="1 0 0" />
+      xyz="0 0 1" />
     <limit
       lower="-1.5708"
       upper="1.5708"
-      effort="0"
-      velocity="0" />
+      effort="18"
+      velocity="3.1416" />
   </joint>
   <link
-    name="zhijian_link">
+    name="end_effector_link">
     <inertial>
       <origin
-        xyz="-1.1102E-16 -2.7756E-17 0.00064558"
+        xyz="3.552E-09 0.0082904 -0.070615"
         rpy="0 0 0" />
       <mass
-        value="0.00036655" />
+        value="0.27303" />
       <inertia
-        ixx="3.9905E-09"
-        ixy="1.0681E-24"
-        ixz="2.9337E-25"
-        iyy="3.9905E-09"
-        iyz="-6.4703E-25"
-        izz="6.4361E-09" />
+        ixx="8.0614E-05"
+        ixy="-1.6726E-14"
+        ixz="2.6139E-13"
+        iyy="8.5026E-05"
+        iyz="-1.0721E-06"
+        izz="0.00011056" />
     </inertial>
     <visual>
       <origin
@@ -583,12 +583,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/zhijian_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/end_effector_link.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.61569 0.94118 0.49412 1" />
+          rgba="0.69804 0.69804 0.69804 1" />
       </material>
     </visual>
     <collision>
@@ -597,38 +597,97 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/zhijian_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/end_effector_link.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="zhijian_joint"
+    name="end_effector_joint"
     type="fixed">
     <origin
-      xyz="0 0 0.17167"
-      rpy="0 0 0" />
+      xyz="-0.0083277 -0.17809 0"
+      rpy="1.5708 1.5708 0" />
     <parent
       link="Link7_L" />
     <child
-      link="zhijian_link" />
+      link="end_effector_link" />
     <axis
       xyz="0 0 0" />
+  </joint>
+
+  <link
+    name="CTU_link">
+    <inertial>
+      <origin
+        xyz="0.1481 0.00028865 0.22331"
+        rpy="0 0 0" />
+      <mass
+        value="7.2262" />
+      <inertia
+        ixx="0.10321"
+        ixy="-5.1492E-06"
+        ixz="0.0010512"
+        iyy="0.39013"
+        iyz="5.0202E-06"
+        izz="0.3405" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/CTU_link.STL" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.25882 0.29804 0.56471 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/CTU_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <joint
+    name="CTU_joint"
+    type="revolute">
+    <origin
+      xyz="0.45457 0 1.1259"
+      rpy="0 0 0" />
+    <parent
+      link="platform_link" />
+    <child
+      link="CTU_link" />
+    <axis
+      xyz="0 0 1" />
+    <limit
+      lower="-3.1416"
+      upper="3.1416"
+      effort="0"
+      velocity="0" />
   </joint>
   <link
     name="box01_link">
     <inertial>
       <origin
-        xyz="0.066347 2.1039E-14 0.050967"
+        xyz="-3.1918E-06 -1.7891E-06 0.053174"
         rpy="0 0 0" />
       <mass
-        value="24.317" />
+        value="8.32" />
       <inertia
-        ixx="0.532"
-        ixy="-1.6722E-17"
-        ixz="2.0561E-17"
-        iyy="0.35276"
-        iyz="-1.8561E-16"
-        izz="0.77081" />
+        ixx="0.1313"
+        ixy="-2.3645E-06"
+        ixz="-1.4052E-06"
+        iyy="0.17321"
+        iyz="1.2583E-06"
+        izz="0.24418" />
     </inertial>
     <visual>
       <origin
@@ -636,12 +695,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/box01_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/box01_link.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.75294 0.75294 0.75294 1" />
+          rgba="0.17647 0.3098 0.72157 1" />
       </material>
     </visual>
     <collision>
@@ -650,43 +709,38 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/box01_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/box01_link.STL" />
       </geometry>
     </collision>
   </link>
   <joint
     name="box01_joint"
-    type="prismatic">
+    type="fixed">
     <origin
-      xyz="0.14402 -0.031 0.31"
+      xyz="-0.12707 0.00066942 0.1791"
       rpy="0 0 0" />
     <parent
-      link="paltform_link" />
+      link="CTU_link" />
     <child
       link="box01_link" />
     <axis
-      xyz="0 1 0" />
-    <limit
-      lower="-0.7"
-      upper="0.7"
-      effort="0"
-      velocity="0" />
+      xyz="0 0 0" />
   </joint>
   <link
-    name="left_dianchi_link">
+    name="box02_link">
     <inertial>
       <origin
-        xyz="1.1315E-09 0.00062273 -0.14093"
+        xyz="-0.0017604 1.0445E-05 0.067189"
         rpy="0 0 0" />
       <mass
-        value="55.685" />
+        value="10.895" />
       <inertia
-        ixx="0.4411"
-        ixy="1.3E-11"
-        ixz="2.359E-10"
-        iyy="0.34283"
-        iyz="0.0020666"
-        izz="0.30662" />
+        ixx="0.18772"
+        ixy="-1.5939E-06"
+        ixz="-0.0033356"
+        iyy="0.26668"
+        iyz="2.6689E-06"
+        izz="0.31499" />
     </inertial>
     <visual>
       <origin
@@ -694,12 +748,12 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/left_dianchi_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/box02_link.STL" />
       </geometry>
       <material
         name="">
         <color
-          rgba="0.2 0.10196 0.62353 1" />
+          rgba="0.3098 0.53725 0.21176 1" />
       </material>
     </visual>
     <collision>
@@ -708,142 +762,21 @@
         rpy="0 0 0" />
       <geometry>
         <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/left_dianchi_link.STL" />
+          filename="package://E1-PRO_EVT2.0_V12_260730/meshes/box02_link.STL" />
       </geometry>
     </collision>
   </link>
   <joint
-    name="left_dainchi_joint"
-    type="prismatic">
+    name="box02_joint"
+    type="fixed">
     <origin
-      xyz="0.52987 0.057 0.24116"
+      xyz="-0.25162 0.0004972 1.3028"
       rpy="0 0 0" />
     <parent
       link="base_link" />
     <child
-      link="left_dianchi_link" />
+      link="box02_link" />
     <axis
-      xyz="0 0 1" />
-    <limit
-      lower="0"
-      upper="0.5"
-      effort="0"
-      velocity="0" />
-  </joint>
-  <link
-    name="right_dianchi_link">
-    <inertial>
-      <origin
-        xyz="1.2007E-09 -0.22062 -0.14093"
-        rpy="0 0 0" />
-      <mass
-        value="55.685" />
-      <inertia
-        ixx="0.4411"
-        ixy="1.3E-11"
-        ixz="-2.359E-10"
-        iyy="0.34283"
-        iyz="-0.0020666"
-        izz="0.30662" />
-    </inertial>
-    <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/right_dianchi_link.STL" />
-      </geometry>
-      <material
-        name="">
-        <color
-          rgba="0.2 0.10196 0.62353 1" />
-      </material>
-    </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/right_dianchi_link.STL" />
-      </geometry>
-    </collision>
-  </link>
-  <joint
-    name="right_dianchi_joint"
-    type="prismatic">
-    <origin
-      xyz="0.52987 0.057 0.24116"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="right_dianchi_link" />
-    <axis
-      xyz="0 0 1" />
-    <limit
-      lower="0"
-      upper="0.5"
-      effort="0"
-      velocity="0" />
-  </joint>
-  <link
-    name="boxs02_link">
-    <inertial>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <mass
-        value="0" />
-      <inertia
-        ixx="0"
-        ixy="0"
-        ixz="0"
-        iyy="0"
-        iyz="0"
-        izz="0" />
-    </inertial>
-    <visual>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/boxs02_link.STL" />
-      </geometry>
-      <material
-        name="">
-        <color
-          rgba="1 1 1 1" />
-      </material>
-    </visual>
-    <collision>
-      <origin
-        xyz="0 0 0"
-        rpy="0 0 0" />
-      <geometry>
-        <mesh
-          filename="package://E1-PRO_EVT2.0_V9_260714/meshes/boxs02_link.STL" />
-      </geometry>
-    </collision>
-  </link>
-  <joint
-    name="boxs02_joint"
-    type="prismatic">
-    <origin
-      xyz="0.034965 -0.031 0.36351"
-      rpy="0 0 0" />
-    <parent
-      link="base_link" />
-    <child
-      link="boxs02_link" />
-    <axis
-      xyz="0.99619 0 0.087156" />
-    <limit
-      lower="0"
-      upper="0.5"
-      effort="0"
-      velocity="0" />
+      xyz="0 0 0" />
   </joint>
 </robot>

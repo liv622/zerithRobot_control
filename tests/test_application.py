@@ -11,10 +11,11 @@ from infrastructure import JsonTeachPointRepository
 from infrastructure import JsonConfigurationRepository
 from robot_framework.controller import Controller
 from robots.e1pro.model import RobotModel
+from robots.e1pro.smoke import resolve_urdf_path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-URDF = ROOT / "e1_pro_full/urdf/E1-PRO_EVT2.0_V9_260714.urdf"
+URDF = resolve_urdf_path(ROOT)
 
 
 class ApplicationServiceTests(unittest.TestCase):

@@ -81,8 +81,8 @@ class RobotModel:
 
     def __init__(self, urdf_path: Path | None = None) -> None:
         self.urdf_path = urdf_path
-        # Defaults mirror E1-PRO_EVT2.0_V9_260714.urdf. ``from_urdf`` replaces
-        # these values by parsing the selected file, keeping the model authoritative.
+        # ``from_urdf`` replaces these fallback values by parsing the active
+        # runtime-selected URDF, keeping that file authoritative.
         self.arm_base_origin = transform(translation=(0.51352, -0.031, 0.31))
         origins = (
             (0.0, 0.0, 0.0),
@@ -117,6 +117,7 @@ class RobotModel:
         )
         self.lower = np.array([joint.lower for joint in self.joints])
         self.upper = np.array([joint.upper for joint in self.joints])
+        self.tcp_transform = transform(translation=(0.0, 0.0, TCP_EXTENSION_M))
 
     @classmethod
     def from_urdf(cls, path: Path) -> "RobotModel":
@@ -124,16 +125,32 @@ class RobotModel:
         root = ElementTree.parse(path).getroot()
         joint_nodes = {node.attrib["name"]: node for node in root.findall("joint")}
         joint_names = set(joint_nodes)
-        required = set(ARM_JOINTS) | set(AUX_JOINTS) | {"zhijian_joint"}
-        missing = sorted(required - joint_names)
-        if missing:
-            raise ValueError(f"URDF missing joints: {', '.join(missing)}")
-        fixed = root.find("joint[@name='zhijian_joint']/origin")
+        arm_names = next(
+            (
+                names
+                for names in (
+                    tuple(f"Joint{i}_J" for i in range(1, 8)),
+                    tuple(f"Joint{i}_L" for i in range(1, 8)),
+                    tuple(f"Joint{i}_R" for i in range(1, 8)),
+                )
+                if set(names).issubset(joint_names)
+            ),
+            None,
+        )
+        if arm_names is None:
+            raise ValueError("URDF missing a complete seven-joint E1-PRO arm chain")
+        tcp_joint = next(
+            (name for name in ("zhijian_joint", "end_effector_joint") if name in joint_names),
+            None,
+        )
+        if tcp_joint is None:
+            raise ValueError("URDF missing terminal fixed TCP joint")
+        fixed = joint_nodes[tcp_joint].find("origin")
         if fixed is None:
-            raise ValueError("URDF zhijian_joint has no origin")
+            raise ValueError("URDF terminal TCP joint has no origin")
         xyz = np.fromstring(fixed.attrib.get("xyz", ""), sep=" ")
-        if xyz.shape != (3,) or not np.allclose(xyz, [0, 0, TCP_EXTENSION_M]):
-            raise ValueError("URDF TCP extension does not match 171.67 mm")
+        if xyz.shape != (3,):
+            raise ValueError("URDF terminal TCP joint has invalid origin")
         def values(text: str | None, default: tuple[float, float, float]) -> np.ndarray:
             if text is None:
                 return np.asarray(default, dtype=float)
@@ -151,9 +168,34 @@ class RobotModel:
             return transform(Rotation.from_euler("xyz", rpy_value), xyz_value)
 
         model = cls(path)
+        model.arm_joint_names = arm_names
+        # Fixed joints are visual-only; only movable auxiliary joints are
+        # exposed to the pendant.  New URDF releases may omit old mechanisms.
+        auxiliary = tuple(
+            name
+            for name in AUX_JOINTS
+            if name in joint_nodes and joint_nodes[name].get("type") != "fixed"
+        )
+        model.aux_joint_names = auxiliary
+        model.auxiliary_limits = {
+            name: (
+                float(joint_nodes[name].find("limit").get("lower")),
+                float(joint_nodes[name].find("limit").get("upper")),
+            )
+            for name in auxiliary
+            if joint_nodes[name].find("limit") is not None
+        }
+        model.auxiliary_labels = {
+            name: RobotModel.auxiliary_labels.get(name, name) for name in auxiliary
+        }
+        initial_values = [INITIAL_CONFIGURATION[f"Joint{i}_J"] for i in range(1, 8)]
+        model.initial_configuration = {
+            **{name: value for name, value in zip(arm_names, initial_values)},
+            **{name: 0.0 for name in auxiliary},
+        }
         model.arm_base_origin = origin_matrix(joint_nodes["arm_base_joint"])
         parsed: list[JointSpec] = []
-        for name in ARM_JOINTS:
+        for name in arm_names:
             node = joint_nodes[name]
             axis_node = node.find("axis")
             limit_node = node.find("limit")
@@ -171,22 +213,27 @@ class RobotModel:
         model.joints = tuple(parsed)
         model.lower = np.array([joint.lower for joint in model.joints])
         model.upper = np.array([joint.upper for joint in model.joints])
-        initial = model.arm_vector(INITIAL_CONFIGURATION)
+        terminal_origin = origin_matrix(joint_nodes[tcp_joint])
+        model.tcp_transform = terminal_origin
+        model.tcp_link_name = joint_nodes[tcp_joint].find("child").get("link")
+        initial = model.arm_vector(model.initial_configuration)
         if np.any(initial < model.lower) or np.any(initial > model.upper):
             raise ValueError("initial configuration violates arm limits")
         return model
 
-    @staticmethod
-    def arm_vector(configuration: dict[str, float]) -> np.ndarray:
-        return np.array([configuration[name] for name in ARM_JOINTS], dtype=float)
+    def arm_vector(self, configuration: dict[str, float]) -> np.ndarray:
+        return np.array(
+            [configuration[name] for name in self.arm_joint_names], dtype=float
+        )
 
-    @staticmethod
-    def aux_configuration(configuration: dict[str, float]) -> dict[str, float]:
-        return {name: float(configuration[name]) for name in AUX_JOINTS}
+    def aux_configuration(self, configuration: dict[str, float]) -> dict[str, float]:
+        return {name: float(configuration[name]) for name in self.aux_joint_names}
 
     def configuration(self, arm: np.ndarray, aux: dict[str, float]) -> dict[str, float]:
-        result = {name: float(value) for name, value in zip(ARM_JOINTS, arm)}
-        result.update({name: float(aux[name]) for name in AUX_JOINTS})
+        result = {
+            name: float(value) for name, value in zip(self.arm_joint_names, arm)
+        }
+        result.update({name: float(aux[name]) for name in self.aux_joint_names})
         return result
 
     def link_transforms(
@@ -212,9 +259,7 @@ class RobotModel:
     def tcp_pose(
         self, arm: np.ndarray, aux: dict[str, float] | None = None
     ) -> np.ndarray:
-        return self.flange_pose(arm, aux) @ transform(
-            translation=(0.0, 0.0, TCP_EXTENSION_M)
-        )
+        return self.flange_pose(arm, aux) @ self.tcp_transform
 
     def tcp_jacobian(
         self, arm: np.ndarray, aux: dict[str, float] | None = None

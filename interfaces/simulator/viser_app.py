@@ -43,7 +43,7 @@ def run_ui(
     control_port: int = 8765,
 ) -> None:
     """Start a Viser scene with no motion controls of its own."""
-    urdf_path = project_root / plugin.urdf_relative_path
+    urdf_path = plugin.resolve_urdf_path(project_root)
     model = plugin.load_model(urdf_path)
     controller = Controller(model, project_root / "last_solution.json")
     service = RobotApplicationService(

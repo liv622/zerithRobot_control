@@ -8,39 +8,44 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from .model import (
-    ARM_JOINTS,
-    AUX_JOINTS,
-    INITIAL_CONFIGURATION,
-    TCP_EXTENSION_M,
-    RobotModel,
-)
+from .model import RobotModel
 from robot_framework.controller import Controller
 from robot_framework.solver import IKSolver
 from trajectory import plan_trajectory
 
-URDF_RELATIVE_PATH = Path(
-    "e1_pro_full/urdf/E1-PRO_EVT2.0_V9_260714.urdf"
-)
+URDF_RELATIVE_PATH = Path("e1_pro_full/urdf")
+
+
+def resolve_urdf_path(project_root: Path) -> Path:
+    """Return the newest E1-PRO URDF delivered in the resource folder."""
+    directory = project_root / URDF_RELATIVE_PATH
+    candidates = sorted(
+        directory.glob("E1-PRO*.urdf"),
+        key=lambda path: (path.stat().st_mtime_ns, path.name),
+        reverse=True,
+    )
+    if not candidates:
+        raise FileNotFoundError(f"未在 {directory} 找到 E1-PRO URDF 文件")
+    return candidates[0]
 
 
 def run_smoke_test(project_root: Path) -> int:
     checks: list[tuple[str, bool, str]] = []
-    urdf_path = project_root / URDF_RELATIVE_PATH
+    urdf_path = resolve_urdf_path(project_root)
     try:
         model = RobotModel.from_urdf(urdf_path)
         checks.append(("URDF 与关节限位加载", True, urdf_path.name))
 
-        arm = model.arm_vector(INITIAL_CONFIGURATION)
-        aux = model.aux_configuration(INITIAL_CONFIGURATION)
+        arm = model.arm_vector(model.initial_configuration)
+        aux = model.aux_configuration(model.initial_configuration)
         flange = model.flange_pose(arm, aux)
         tcp = model.tcp_pose(arm, aux)
         offset = flange[:3, :3].T @ (tcp[:3, 3] - flange[:3, 3])
         checks.append(
             (
                 "真实 TCP 延伸",
-                bool(np.allclose(offset, [0, 0, TCP_EXTENSION_M], atol=1e-9)),
-                f"{offset[2] * 1000:.2f} mm",
+                bool(np.allclose(offset, model.tcp_transform[:3, 3], atol=1e-9)),
+                f"{np.linalg.norm(offset) * 1000:.2f} mm",
             )
         )
 
@@ -77,8 +82,8 @@ def run_smoke_test(project_root: Path) -> int:
         checks.append(
             (
                 "非机械臂关节硬锁定",
-                all(aux_before[name] == controller.aux[name] for name in AUX_JOINTS),
-                ", ".join(AUX_JOINTS),
+                all(aux_before[name] == controller.aux[name] for name in model.aux_joint_names),
+                ", ".join(model.aux_joint_names),
             )
         )
 
@@ -155,7 +160,7 @@ def run_smoke_test(project_root: Path) -> int:
         checks.append(
             (
                 "last_solution.json",
-                set(saved["arm_joints_rad"]) == set(ARM_JOINTS),
+                set(saved["arm_joints_rad"]) == set(model.arm_joint_names),
                 str(output_path),
             )
         )
