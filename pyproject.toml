@@ -1,0 +1,20 @@
+[project]
+name = "robot-simulation-framework"
+version = "1.0.0"
+description = "Extensible multi-robot simulation and teach-pendant framework"
+requires-python = ">=3.11,<3.14"
+dynamic = ["dependencies"]
+
+[project.scripts]
+robot-simulator = "entrypoints.simulator:main"
+robot-pendant = "entrypoints.pendant:main"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

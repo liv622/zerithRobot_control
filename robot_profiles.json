@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "profiles": {
+    "test1": {
+      "live_solve": true,
+      "orientation_lock": true,
+      "auto_recovery": true,
+      "recovery_count": 10,
+      "guide_enabled": false,
+      "guide_strength": 0.05,
+      "point_duration_s": 5.0,
+      "trajectory_frequency_hz": 30.0,
+      "loop_teach_program": false,
+      "speed_percent": 30.0,
+      "max_linear_speed_mm_s": 250.0,
+      "max_angular_speed_deg_s": 60.0,
+      "max_joint_speed_deg_s": 60.0,
+      "command_delay_s": 0.0,
+      "guide_degrees": [
+        0.0,
+        -28.64788975654116,
+        0.0,
+        -114.59155902616465,
+        0.0,
+        -34.95042550298022,
+        0.0
+      ]
+    }
+  }
+}
