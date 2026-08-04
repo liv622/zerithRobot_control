@@ -55,7 +55,10 @@ class ContinuousJogService:
         direction: int,
         step_value: float,
     ) -> None:
-        period_s = 0.05
+        period_s = 1.0 / min(
+            1000.0,
+            max(50.0, self.settings.trajectory_frequency_hz),
+        )
         first_sample = True
         try:
             while first_sample or not cancel.is_set():
@@ -77,7 +80,10 @@ class ContinuousJogService:
                     )
                     self.controller.set_target_xyz_rpy(values[:3], values[3:])
                     self.events.target_changed()
-                    solution = self.solve(lock_orientation_override=True)
+                    solution = self.solve(
+                        lock_orientation_override=True,
+                        emit_motion=True,
+                    )
                     if solution is not None and not solution.reachable:
                         self.set_status("连续点动停止：目标不可达")
                         return
@@ -105,6 +111,7 @@ class ContinuousJogService:
                     self.events.guide_changed()
                     self.events.target_changed()
                     self.events.scene_changed()
+                    self.events.motion_sample(self.controller.arm.copy())
                 else:
                     speed = min(
                         step_value * 10.0,
@@ -215,7 +222,10 @@ class ContinuousJogService:
             )
             self.controller.set_target_xyz_rpy(values[:3], values[3:])
             self.events.target_changed()
-            solution = self.solve(lock_orientation_override=True)
+            solution = self.solve(
+                lock_orientation_override=True,
+                emit_motion=True,
+            )
             if solution is not None and not solution.reachable:
                 raise ValueError("步进点动停止：目标不可达")
             return
@@ -241,6 +251,7 @@ class ContinuousJogService:
             self.events.guide_changed()
             self.events.target_changed()
             self.events.scene_changed()
+            self.events.motion_sample(self.controller.arm.copy())
             return
 
         self.null_space.begin()

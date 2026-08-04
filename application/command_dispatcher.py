@@ -38,6 +38,24 @@ class CommandDispatcher:
             if action == "stop_continuous_jog":
                 app.continuous_jog.stop()
                 return {"message": "连续点动已停止"}
+            if action == "connect_hardware":
+                app.connect_hardware(str(command["ip"]))
+                return {"message": "右臂真机反馈通道已连接，尚未上使能"}
+            if action == "disconnect_hardware":
+                app.disconnect_hardware()
+                return {"message": "真机已断开，并已下使能"}
+            if action == "enable_hardware":
+                app.enable_hardware()
+                return {"message": "右臂已启用关节阻抗 PD 前馈模式"}
+            if action == "disable_hardware":
+                app.disable_hardware()
+                return {"message": "机器人已下使能"}
+            if action == "release_hardware_brake":
+                app.release_hardware_brake()
+                return {"message": "已发送松闸命令"}
+            if action == "apply_hardware_brake":
+                app.apply_hardware_brake()
+                return {"message": "已发送抱闸命令"}
             if action == "jog_step":
                 app.continuous_jog.step_once(
                     mode=str(command["mode"]),
@@ -179,8 +197,8 @@ class CommandDispatcher:
             if action in {"set_teach_program_settings", "run_teach_points"}:
                 duration = float(command["duration"])
                 frequency = float(command["frequency"])
-                if duration < 0.2 or frequency < 2.0:
-                    raise ValueError("单点时长至少 0.2 s，频率至少 2 Hz")
+                if duration < 0.2 or not 50.0 <= frequency <= 1000.0:
+                    raise ValueError("单点时长至少 0.2 s，插补频率须在 50 到 1000 Hz")
                 loop = bool(command.get("loop", False))
                 app.update_settings(
                     point_duration_s=duration,

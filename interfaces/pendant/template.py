@@ -65,6 +65,14 @@ PENDANT_HTML = """<!doctype html>
               <div class="metric"><b id="homeDelay">--</b><span>动作间延时</span></div>
             </div>
           </article>
+          <article class="panel hardware-panel" data-submodule="home-hardware">
+            <div class="panel-title">E1Pro初始化控制 <span id="hardwareState">右臂未连接</span></div>
+            <div class="form-row"><label>控制柜 IP</label><input id="hardwareIp" value="192.168.1.190" inputmode="decimal"></div>
+            <div class="action-row two"><button class="primary" onclick="connectHardware()">连接右臂</button><button onclick="cmd('disconnect_hardware')">断开</button></div>
+            <div class="action-row two"><button class="run" onclick="cmd('enable_hardware')">启用 PD 前馈</button><button class="danger" onclick="cmd('disable_hardware')">右臂下使能</button></div>
+            <div class="action-row two"><button class="warn" onclick="cmd('release_hardware_brake')">右臂松闸</button><button class="danger" onclick="cmd('apply_hardware_brake')">右臂抱闸</button></div>
+            <p class="hint">仅控制右臂 B。使能将配置关节阻抗及与插补频率匹配的 PD 前馈；松闸前请确认机械臂已被可靠支撑。</p>
+          </article>
         </div>
       </section>
 
@@ -160,7 +168,7 @@ PENDANT_HTML = """<!doctype html>
             <div class="action-row two"><button onclick="updatePoint()">保存修改</button><button class="danger" onclick="deletePoint()">删除</button></div>
             <div class="divider"></div>
             <div class="form-row"><label>基础单点时长</label><input id="duration" type="number" min=".2" step=".1"></div>
-            <div class="form-row"><label>插补频率</label><input id="frequency" type="number" min="2" step="1"></div>
+            <div class="form-row"><label>插补频率</label><input id="frequency" type="number" min="50" max="1000" step="1"></div>
             <label class="switch-row">循环执行<input id="loopProgram" type="checkbox"><i></i></label>
             <div class="action-row two"><button class="run" onclick="runPoints()">▶ 运行勾选点</button><button class="danger" onclick="cmd('stop_teach_points')">■ 停止</button></div>
           </aside>
@@ -187,7 +195,7 @@ PENDANT_HTML = """<!doctype html>
             <div class="config-grid compact-config">
               <div class="config-field"><label>恢复搜索种子数</label><div><input id="seeds" type="number" min="4" max="24"><em>个</em></div></div>
               <div class="config-field"><label>默认单点时长</label><div><input id="configDuration" type="number" min=".2" step=".1"><em>s</em></div></div>
-              <div class="config-field"><label>轨迹频率</label><div><input id="configFrequency" type="number" min="2"><em>Hz</em></div></div>
+              <div class="config-field"><label>轨迹频率</label><div><input id="configFrequency" type="number" min="50" max="1000"><em>Hz</em></div></div>
             </div>
             <p class="hint">速度百分比同时作用于连续点动、MOVL 和 MOVJ；最大速度作为轨迹硬上限。</p>
           </article>

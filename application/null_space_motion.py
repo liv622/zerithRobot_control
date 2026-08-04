@@ -125,6 +125,7 @@ class NullSpaceMotionService:
         self.events.guide_changed()
         self.events.solution_changed(solution)
         self.events.scene_changed()
+        self.events.motion_sample(self.controller.arm.copy())
         return solution
 
     def end(self) -> None:

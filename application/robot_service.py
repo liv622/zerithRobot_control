@@ -16,7 +16,8 @@ from .command_dispatcher import CommandDispatcher
 from .configuration import ConfigurationService
 from .continuous_jog import ContinuousJogService
 from .contracts import ApplicationEvents, ApplicationSettings
-from .ports import ConfigurationRepository, TeachPointRepository
+from .hardware import NullRobotHardware
+from .ports import ConfigurationRepository, RobotHardware, TeachPointRepository
 from .null_space_motion import NullSpaceMotionService
 from .teach_program import TeachProgramService
 
@@ -32,6 +33,7 @@ class RobotApplicationService:
         configurations: ConfigurationRepository | None = None,
         settings: ApplicationSettings | None = None,
         events: ApplicationEvents | None = None,
+        hardware: RobotHardware | None = None,
     ) -> None:
         self.model = model
         self.controller = controller
@@ -42,6 +44,7 @@ class RobotApplicationService:
             self.settings,
         )
         self._events = events or ApplicationEvents()
+        self.hardware = hardware or NullRobotHardware()
         self._solve_lock = threading.Lock()
         self._command_lock = threading.RLock()
         self.teach_program = TeachProgramService(
@@ -105,6 +108,7 @@ class RobotApplicationService:
         *,
         force: bool = False,
         lock_orientation_override: bool | None = None,
+        emit_motion: bool = False,
     ) -> IKSolution | None:
         if not self._solve_lock.acquire(blocking=False):
             return None
@@ -127,6 +131,8 @@ class RobotApplicationService:
             )
             self.events.scene_changed()
             self.events.solution_changed(solution)
+            if emit_motion:
+                self.events.motion_sample(self.controller.arm.copy())
             return solution
         finally:
             self._solve_lock.release()
@@ -227,6 +233,7 @@ class RobotApplicationService:
         self.events.guide_changed()
         self.events.target_changed()
         self.events.scene_changed()
+        self.events.motion_sample(self.controller.arm.copy())
 
     def update_guide(
         self,
@@ -300,6 +307,27 @@ class RobotApplicationService:
         self.events.scene_changed()
         return difference
 
+    def connect_hardware(self, ip: str) -> None:
+        self.hardware.connect(ip)
+
+    def disconnect_hardware(self) -> None:
+        self.hardware.disconnect()
+
+    def enable_hardware(self) -> None:
+        frequency = self.settings.trajectory_frequency_hz
+        if not 50.0 <= frequency <= 1000.0:
+            raise ValueError("PD 前馈要求插补频率在 50 到 1000 Hz")
+        self.hardware.enable(max(1, min(20, int(round(1000.0 / frequency)))))
+
+    def disable_hardware(self) -> None:
+        self.hardware.disable()
+
+    def release_hardware_brake(self) -> None:
+        self.hardware.release_brake()
+
+    def apply_hardware_brake(self) -> None:
+        self.hardware.apply_brake()
+
     def update_motion_settings(self, values: dict[str, Any]) -> None:
         validated = self.configurations.validate_motion_values(values)
         self.update_settings(**validated)
@@ -368,6 +396,7 @@ class RobotApplicationService:
             "arm_degrees": [
                 float(value) for value in np.rad2deg(self.controller.arm)
             ],
+            "hardware": self.hardware.state(),
             "auxiliary": {
                 name: float(self.controller.aux[name])
                 for name in self.model.aux_joint_names
@@ -423,3 +452,4 @@ class RobotApplicationService:
     def close(self) -> None:
         self.continuous_jog.stop()
         self.teach_program.stop()
+        self.hardware.disconnect()

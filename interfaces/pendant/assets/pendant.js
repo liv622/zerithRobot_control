@@ -186,6 +186,10 @@ function jogAux(name, direction) {
   cmd("jog_aux", {joint: name, delta: direction * cartesianStep() / 1000});
 }
 
+function connectHardware() {
+  cmd("connect_hardware", {ip: $("hardwareIp").value});
+}
+
 function values(prefix, count) {
   return Array.from({length: count}, (_, index) => Number($(prefix + index).value));
 }
@@ -437,6 +441,13 @@ function render(nextState) {
   if (!robotControlsBuilt) buildRobotControls(state.robot);
   $("lamp").className = "lamp on";
   $("connection").textContent = "仿真在线";
+  const hardware = state.hardware || {};
+  const hardwareText = !hardware.connected ? "右臂未连接" : (
+    hardware.enabled ? "右臂已上使能" : "右臂已连接·下使能"
+  );
+  $("hardwareState").textContent = hardware.enabled
+    ? `${hardwareText} · ${hardware.control_mode || "PD 前馈"}`
+    : hardwareText;
   $("backend").textContent = `IK ${state.backend}`;
   $("reach").textContent = state.reachable === null ? "等待" : (state.reachable ? "可达" : "不可达");
   $("reach").style.color = state.reachable === false ? "var(--red)" : "var(--green)";
@@ -449,6 +460,8 @@ function render(nextState) {
   $("attempts").textContent = state.attempts ?? "--";
   $("dragState").textContent = state.drag_unlocked ? "解锁" : "锁定";
   if (editing || pending) return;
+
+  if (hardware.ip) $("hardwareIp").value = hardware.ip;
 
   const pose = [...state.target.position_m, ...state.target.rpy_degrees];
   pose.forEach((value, index) => {

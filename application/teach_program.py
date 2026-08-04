@@ -142,6 +142,7 @@ class TeachProgramService:
                 self.controller.solution = solution
                 self.controller.save()
                 self.events.scene_changed()
+                self.events.motion_sample(self.controller.arm.copy())
                 arm = solution.arm
         else:
             trajectory = plan_cartesian_trajectory(
@@ -162,6 +163,7 @@ class TeachProgramService:
                 self.controller.solution = solution
                 self.controller.save()
                 self.events.scene_changed()
+                self.events.motion_sample(self.controller.arm.copy())
         self.controller.target = target
         self.events.target_changed()
         return True
@@ -197,6 +199,7 @@ class TeachProgramService:
             self.controller.arm = arm.copy()
             self.controller.solution = None
             self.events.scene_changed()
+            self.events.motion_sample(self.controller.arm.copy())
         self.controller.guide = self.controller.arm.copy()
         self.controller.target = self.model.tcp_pose(
             self.controller.arm,

@@ -90,6 +90,10 @@ class CommunicationTests(unittest.TestCase):
         self.assertIn("关节角度 (deg)", source)
         self.assertIn("笛卡尔位姿 (m / deg)", source)
         self.assertIn("move_teach_point", source)
+        self.assertIn("E1Pro初始化控制", PENDANT_HTML)
+        self.assertIn("connect_hardware", source)
+        self.assertIn("BRAK1", (Path(__file__).resolve().parents[1] / "interfaces/hardware/marvin.py").read_text(encoding="utf-8"))
+        self.assertNotIn("BRAK0", (Path(__file__).resolve().parents[1] / "interfaces/hardware/marvin.py").read_text(encoding="utf-8"))
 
     def test_page_switch_never_navigates_the_viser_frame(self) -> None:
         assets = Path(__file__).resolve().parents[1] / "interfaces/pendant/assets"
