@@ -17,7 +17,14 @@ from .configuration import ConfigurationService
 from .continuous_jog import ContinuousJogService
 from .contracts import ApplicationEvents, ApplicationSettings
 from .hardware import NullRobotHardware
-from .ports import ConfigurationRepository, RobotHardware, TeachPointRepository
+from .frames import CoordinateFrameService
+from .ports import (
+    ConfigurationRepository,
+    CoordinateFrameRepository,
+    RobotHardware,
+    TeachPointProfileRepository,
+    TeachPointRepository,
+)
 from .null_space_motion import NullSpaceMotionService
 from .teach_program import TeachProgramService
 
@@ -34,10 +41,14 @@ class RobotApplicationService:
         settings: ApplicationSettings | None = None,
         events: ApplicationEvents | None = None,
         hardware: RobotHardware | None = None,
+        frame_repository: CoordinateFrameRepository | None = None,
+        teach_point_profiles: TeachPointProfileRepository | None = None,
     ) -> None:
         self.model = model
         self.controller = controller
         self.teach_points = teach_points
+        self.teach_point_profiles = teach_point_profiles
+        self.active_teach_point_profile = ""
         self.settings = settings or ApplicationSettings()
         self.configurations = ConfigurationService(
             configurations,
@@ -45,6 +56,17 @@ class RobotApplicationService:
         )
         self._events = events or ApplicationEvents()
         self.hardware = hardware or NullRobotHardware()
+        def arm_base_transform() -> np.ndarray:
+            platform = float(controller.aux.get("platform_joint", 0.0))
+            platform_transform = np.eye(4)
+            platform_transform[2, 3] = platform
+            return platform_transform @ model.arm_base_origin
+
+        self.frames = CoordinateFrameService(
+            model.tcp_transform,
+            frame_repository,
+            arm_base_transform,
+        )
         self._solve_lock = threading.Lock()
         self._command_lock = threading.RLock()
         self.teach_program = TeachProgramService(
@@ -53,6 +75,8 @@ class RobotApplicationService:
             teach_points,
             self.settings,
             self._events,
+            self.frames.pose_values,
+            self.frames.default_from_display,
         )
         self.null_space = NullSpaceMotionService(
             model,
@@ -70,6 +94,8 @@ class RobotApplicationService:
             lambda: self.teach_program.status,
             self.settings,
             self.null_space,
+            self.displayed_target_values,
+            self.set_displayed_target_values,
         )
         self.teach_program.motion_blocked = lambda: (
             self.continuous_jog.running or self._solve_lock.locked()
@@ -146,7 +172,7 @@ class RobotApplicationService:
         values = np.asarray(values, dtype=float)
         if values.shape != (6,) or not np.all(np.isfinite(values)):
             raise ValueError("TCP 目标必须包含 6 个有限数值")
-        self.controller.set_target_xyz_rpy(values[:3], values[3:])
+        self.controller.target = self.frames.default_from_display(values)
         self.events.target_changed()
         if solve_live and self.settings.live_solve:
             self.solve()
@@ -177,6 +203,25 @@ class RobotApplicationService:
             self.controller.aux,
         )
         self.events.target_changed()
+
+    def displayed_target_values(self) -> np.ndarray:
+        return np.asarray(self.frames.pose_values(self.controller.target), dtype=float)
+
+    def set_displayed_target_values(self, values: np.ndarray, *, solve_live: bool = True) -> None:
+        self.set_target_values(values, solve_live=solve_live)
+
+    def create_base_frame(self, name: str, values: np.ndarray) -> None:
+        self.frames.create_base(name, [float(value) for value in self.require_values({"values": values}, 6)])
+        self.events.settings_changed()
+
+    def create_tcp_frame(self, name: str, values: np.ndarray) -> None:
+        self.frames.create_tcp(name, [float(value) for value in self.require_values({"values": values}, 6)])
+        self.events.settings_changed()
+
+    def select_frames(self, base: str, tcp: str) -> None:
+        self.frames.select(base, tcp)
+        self.events.target_changed()
+        self.events.settings_changed()
 
     def reset(self) -> None:
         self.controller.reset()
@@ -211,6 +256,11 @@ class RobotApplicationService:
             self.controller.aux.get(name, 0.0) + delta,
             solve_live=False,
         )
+
+    def move_auxiliary_input(self, name: str, value: float) -> None:
+        if not np.isfinite(value):
+            raise ValueError("附加轴目标必须为有限数值")
+        self.set_auxiliary(name, value, solve_live=False)
 
     def jog_joint(self, name: str, delta_degrees: float) -> None:
         if name not in self.model.arm_joint_names:
@@ -365,6 +415,58 @@ class RobotApplicationService:
     def stop_teach_points(self) -> None:
         self.teach_program.stop()
 
+    def save_teach_point_profile(self, name: str) -> None:
+        if self.teach_point_profiles is None:
+            raise ValueError("当前应用未配置示教点位配置仓储")
+        self.teach_point_profiles.save(name, self.teach_points.as_json())
+        self.active_teach_point_profile = name.strip()
+
+    def load_teach_point_profile(self, name: str) -> None:
+        if self.teach_point_profiles is None:
+            raise ValueError("当前应用未配置示教点位配置仓储")
+        if self.teach_program.running or self.continuous_jog.running:
+            raise ValueError("机器人运动期间不能调用示教点位配置")
+        self.teach_points.replace(self.teach_point_profiles.get(name))
+        self.active_teach_point_profile = name
+        self.teach_program.set_status(f"已调用示教点位配置：{name}")
+
+    def move_cartesian_input(self, values: np.ndarray) -> None:
+        values = self.require_values({"values": values}, 6)
+        # Publish the entered target before the asynchronous interpolator
+        # starts, so polling clients never restore stale field values.
+        self.controller.target = self.frames.default_from_display(values)
+        self.events.target_changed()
+        self.teach_program.move_values(
+            "MOVL",
+            joint_values=[float(value) for value in np.rad2deg(self.controller.arm)],
+            cartesian_values=[float(value) for value in values],
+            name="笛卡尔输入目标",
+        )
+
+    def move_joint_input(self, values: np.ndarray) -> None:
+        values = self.require_values({"values": values}, len(self.model.arm_joint_names))
+        self.controller.target = self.model.tcp_pose(
+            np.deg2rad(values), self.controller.aux
+        )
+        self.events.target_changed()
+        self.teach_program.move_values(
+            "MOVJ",
+            joint_values=[float(value) for value in values],
+            cartesian_values=self.frames.pose_values(self.controller.target),
+            name="关节输入目标",
+        )
+
+    def move_nullspace_input(self, delta_degrees: float) -> None:
+        if not np.isfinite(delta_degrees):
+            raise ValueError("零空间目标必须为有限数值")
+        if self.teach_program.running or self.continuous_jog.running:
+            raise ValueError("机器人运动期间不能执行零空间目标")
+        self.null_space.begin()
+        try:
+            self.null_space.step(float(delta_degrees))
+        finally:
+            self.null_space.end()
+
     def update_settings(self, **values: Any) -> None:
         for name, value in values.items():
             if not hasattr(self.settings, name):
@@ -380,7 +482,7 @@ class RobotApplicationService:
         return values
 
     def read_state(self) -> dict:
-        xyz, rpy = self.controller.target_xyz_rpy()
+        target_values = self.displayed_target_values()
         solution = self.controller.solution
         return {
             "backend": self.controller.solver.backend_name,
@@ -390,8 +492,8 @@ class RobotApplicationService:
                 "auxiliary_labels": self.model.auxiliary_labels,
             },
             "target": {
-                "position_m": [float(value) for value in xyz],
-                "rpy_degrees": [float(value) for value in rpy],
+                "position_m": [float(value) for value in target_values[:3]],
+                "rpy_degrees": [float(value) for value in target_values[3:]],
             },
             "arm_degrees": [
                 float(value) for value in np.rad2deg(self.controller.arm)
@@ -436,6 +538,7 @@ class RobotApplicationService:
                 "command_delay_s": self.settings.command_delay_s,
             },
             "configuration": self.configurations.state(),
+            "coordinate_frames": self.frames.state(),
             "program_status": self.teach_program.status,
             "teach_program": {
                 "duration": self.settings.point_duration_s,
@@ -443,6 +546,11 @@ class RobotApplicationService:
                 "loop": self.settings.loop_teach_program,
                 "running": self.teach_program.running,
                 "points": self.teach_points.as_json(),
+                "profiles": (
+                    [] if self.teach_point_profiles is None
+                    else self.teach_point_profiles.names()
+                ),
+                "active_profile": self.active_teach_point_profile,
             },
         }
 

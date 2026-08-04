@@ -20,6 +20,7 @@ class TeachPoint:
     motion_type: str
     joint_values: list[float]
     cartesian_values: list[float]
+    speed_percent: float = 30.0
     checked: bool = True
 
     @property
@@ -38,6 +39,9 @@ class TeachPoint:
             )
         if cartesian.shape != (6,) or not np.all(np.isfinite(cartesian)):
             raise ValueError("示教点必须包含 6 个有限笛卡尔位姿值")
+        if not np.isfinite(self.speed_percent) or not 1.0 <= float(self.speed_percent) <= 100.0:
+            raise ValueError("示教点速度百分比必须在 1 到 100 之间")
         self.joint_values = [float(value) for value in joints]
         self.cartesian_values = [float(value) for value in cartesian]
+        self.speed_percent = float(self.speed_percent)
         self.name = self.name.strip() or f"P{self.point_id:03d}"

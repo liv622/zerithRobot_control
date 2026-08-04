@@ -77,7 +77,7 @@ PENDANT_HTML = """<!doctype html>
       </section>
 
       <section id="page-move" class="page">
-        <div class="page-head"><div><h1>运动示教</h1><p>长按方向键连续运动，松开立即停止</p></div>
+        <div class="page-head"><div><h1>运动示教</h1><p>数值输入确认后立即插补运动；长按方向键连续运动</p></div>
           <div class="segmented move-tabs">
             <button class="active" data-mode="cartesian">笛卡尔</button>
             <button data-mode="joint">关节</button>
@@ -93,7 +93,6 @@ PENDANT_HTML = """<!doctype html>
             <div id="targetFields" class="target-fields"></div>
             <div id="cartJog" class="cart-jog"></div>
             <div class="action-row">
-              <button class="primary" onclick="applyTarget()">写入目标</button>
               <button onclick="cmd('target_current')">读取当前 TCP</button>
               <button onclick="cmd('solve')">执行 IK</button>
               <button onclick="cmd('recover')">多起点求解</button>
@@ -112,7 +111,7 @@ PENDANT_HTML = """<!doctype html>
           </article>
         </div>
         <div id="move-joint" class="move-mode">
-          <article class="panel grow" data-submodule="move-motion"><div class="panel-title">关节运动 <span>J1—J7 · deg</span></div><div id="jointList" class="joint-list"></div>
+          <article class="panel grow" data-submodule="move-motion"><div class="panel-title">关节运动 <span>输入确认后立即插补运动 · deg</span></div><div id="jointList" class="joint-list"></div>
           <section class="inline-settings arm-shape-settings" data-submodule="move-settings">
             <div class="inline-settings-title">同 TCP 臂型 <span>冗余机器人</span></div>
             <p class="hint">保持当前 TCP 位置和姿态不变，搜索另一组关节解。</p>
@@ -138,7 +137,7 @@ PENDANT_HTML = """<!doctype html>
             <div class="null-state"><i id="nullLamp"></i><b id="nullState">等待点动</b></div>
             <p class="hint">长按零空间负方向或正方向。系统先锁定当前 TCP，再沿 7 轴机械臂的零空间方向连续改变关节值。</p>
             <p class="hint">7 轴关节会联动变化。一般构型下固定 6 维 TCP 后只剩 1 个冗余自由度，因此不能把 7 个关节当成 7 个独立自由度操作。</p>
-            <div class="inline-settings-grid"><div class="step-box"><span>步进值 / 连续速度档</span><b><input id="nullStep" type="number" value="5" min=".1" max="30" step=".1"> deg</b><label class="step-mode-toggle">步进点动<input id="nullStepMode" type="checkbox"><i></i></label></div><button onclick="cmd('guide_current')">当前关节值设为参考</button></div>
+            <div class="inline-settings-grid"><div class="step-box"><span>步进值 / 连续速度档</span><b><input id="nullStep" type="number" value="5" min=".1" max="30" step=".1"> deg</b><label class="step-mode-toggle">步进点动<input id="nullStepMode" type="checkbox"><i></i></label></div><button onclick="cmd('guide_current')">当前关节值设为参考</button><div class="step-box"><span>零空间目标 φ（相对当前）</span><b><input id="nullTarget" type="number" value="0" step=".1" onchange="moveNullspaceInput()"> deg</b></div></div>
             </section></article>
         </div>
         <div id="move-auxiliary" class="move-mode">
@@ -166,6 +165,11 @@ PENDANT_HTML = """<!doctype html>
             <input id="editName" placeholder="选择点位" disabled>
             <div id="pointEditor" class="editor-grid"></div>
             <div class="action-row two"><button onclick="updatePoint()">保存修改</button><button class="danger" onclick="deletePoint()">删除</button></div>
+            <div class="divider"></div>
+            <div class="panel-title">示教点位配置 <span id="teachProfileState">未调用</span></div>
+            <input id="teachProfileName" maxlength="32" placeholder="输入配置名称，例如 装配工位A">
+            <div class="action-row two"><button class="primary" onclick="saveTeachPointProfile()">保存点位配置</button><button onclick="loadTeachPointProfile()">调用点位配置</button></div>
+            <select id="teachProfileSelect" onchange="selectTeachPointProfile()"></select>
             <div class="divider"></div>
             <div class="form-row"><label>基础单点时长</label><input id="duration" type="number" min=".2" step=".1"></div>
             <div class="form-row"><label>插补频率</label><input id="frequency" type="number" min="50" max="1000" step="1"></div>
@@ -205,6 +209,22 @@ PENDANT_HTML = """<!doctype html>
             <button class="primary" onclick="saveProfile()">保存当前配置</button>
             <div id="profileList" class="profile-list"></div>
             <p class="hint">配置包含速度、延时、求解参数、轨迹参数和当前臂型参考。</p>
+          </aside>
+          <aside class="panel frame-panel" data-submodule="config-frames">
+            <div class="panel-title">坐标系与 TCP <span>位姿显示 / 运动参考</span></div>
+            <div class="form-row"><label>用户基坐标系</label><select id="baseFrameSelect"></select></div>
+            <div class="form-row"><label>TCP 坐标系</label><select id="tcpFrameSelect"></select></div>
+            <button class="primary wide" onclick="selectCoordinateFrames()">应用当前坐标系</button>
+            <div class="divider"></div>
+            <b>创建用户基坐标系</b>
+            <input id="baseFrameName" maxlength="32" placeholder="名称，例如 工装A">
+            <input id="baseFrameValues" placeholder="X,Y,Z,Rx,Ry,Rz（m, m, m, deg）">
+            <button onclick="createCoordinateFrame('base')">保存用户基坐标系</button>
+            <b>创建 TCP 坐标系</b>
+            <input id="tcpFrameName" maxlength="32" placeholder="名称，例如 吸盘TCP">
+            <input id="tcpFrameValues" placeholder="X,Y,Z,Rx,Ry,Rz（相对法兰）">
+            <button onclick="createCoordinateFrame('tcp')">保存 TCP 坐标系</button>
+            <p class="hint">用户基坐标系相对 base_link；TCP 坐标系相对法兰。创建后可立即选择。</p>
           </aside>
         </div>
       </section>

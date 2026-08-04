@@ -21,7 +21,9 @@ from application import ApplicationEvents, RobotApplicationService
 from communication import SimulationCommandServer
 from infrastructure import (
     JsonConfigurationRepository,
+    JsonCoordinateFrameRepository,
     JsonTeachPointRepository,
+    JsonTeachPointProfileRepository,
 )
 from interfaces.hardware import MarvinRobotHardware
 from robot_framework.controller import Controller
@@ -52,6 +54,12 @@ def run_ui(
         JsonTeachPointRepository(project_root / "teach_points.json"),
         JsonConfigurationRepository(project_root / "robot_profiles.json"),
         hardware=MarvinRobotHardware(project_root),
+        frame_repository=JsonCoordinateFrameRepository(
+            project_root / "coordinate_frames.json"
+        ),
+        teach_point_profiles=JsonTeachPointProfileRepository(
+            project_root / "teach_point_profiles.json"
+        ),
     )
     urdf = yourdfpy.URDF.load(str(urdf_path))
     actuated_names = tuple(urdf.actuated_joint_names)

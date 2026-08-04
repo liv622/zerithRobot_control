@@ -11,6 +11,8 @@ let selectedPointId = null;
 let activeHold = null;
 let holdSerial = 0;
 let robotControlsBuilt = false;
+let jointInputDirty = false;
+let auxInputDirty = new Set();
 let activePage = "home";
 let polling = false;
 const $ = id => document.getElementById(id);
@@ -18,7 +20,7 @@ const $ = id => document.getElementById(id);
 function buildStaticControls() {
   $("targetFields").innerHTML = axes.map((axis, index) => `
     <div class="target-field"><label>${axis} (${index < 3 ? "m" : "deg"})</label>
-    <input id="t${index}" type="number" step="${index < 3 ? ".001" : ".1"}"></div>
+    <input id="t${index}" type="number" step="${index < 3 ? ".001" : ".1"}" onchange="moveCartesianInput()"></div>
   `).join("");
   $("cartJog").innerHTML = axes.map((axis, index) => `
     <div class="jog-axis">
@@ -54,7 +56,7 @@ function buildRobotControls(robot) {
     <div class="joint">
       <b>J${index + 1}</b>
       <button ${holdEvents("joint", index, -1)}>−</button>
-      <span id="j${index}" class="value">0.00°</span>
+      <input id="jointTarget${index}" class="joint-target" type="number" step=".1" onchange="jointInputDirty=true;moveJointInput()" aria-label="J${index + 1}目标角度">
       <button ${holdEvents("joint", index, 1)}>＋</button>
     </div>
   `).join("");
@@ -67,9 +69,9 @@ function buildRobotControls(robot) {
   $("auxList").innerHTML = auxNames.map((name, index) => `
     <div class="joint">
       <b>${escapeHtml(robot.auxiliary_labels[name] || name)}</b>
-      <button onclick="jogAux('${escapeHtml(name)}',-1)">−</button>
-      <span id="a${index}" class="value">0.000</span>
-      <button onclick="jogAux('${escapeHtml(name)}',1)">＋</button>
+      <button ${holdEvents("auxiliary", index, -1)}>−</button>
+      <input id="auxTarget${index}" class="joint-target" type="number" step=".001" onchange="moveAuxInput('${escapeHtml(name)}',${index})" aria-label="${escapeHtml(name)}目标值">
+      <button ${holdEvents("auxiliary", index, 1)}>＋</button>
     </div>
   `).join("");
   robotControlsBuilt = true;
@@ -152,6 +154,7 @@ function jogStep(mode) {
 }
 
 function stepModeEnabled(mode) {
+  if (mode === "auxiliary") return false;
   const id = mode === "cartesian" ? "cartStepMode" : (
     mode === "joint" ? "jointStepMode" : "nullStepMode"
   );
@@ -164,6 +167,7 @@ async function startHold(event, mode, index, direction) {
   const extra = {mode, direction, step: jogStep(mode)};
   if (mode === "cartesian") extra.axis = index;
   else if (mode === "joint") extra.joint = jointNames[index];
+  else if (mode === "auxiliary") extra.joint = auxNames[index];
   if (stepModeEnabled(mode)) {
     await cmd("jog_step", extra);
     return;
@@ -186,6 +190,14 @@ function jogAux(name, direction) {
   cmd("jog_aux", {joint: name, delta: direction * cartesianStep() / 1000});
 }
 
+function moveAuxInput(name, index) {
+  auxInputDirty.add(index);
+  cmd("move_auxiliary_input", {
+    joint: name,
+    value: Number($("auxTarget" + index).value),
+  }).then(result => { if (!result) auxInputDirty.delete(index); });
+}
+
 function connectHardware() {
   cmd("connect_hardware", {ip: $("hardwareIp").value});
 }
@@ -194,8 +206,18 @@ function values(prefix, count) {
   return Array.from({length: count}, (_, index) => Number($(prefix + index).value));
 }
 
-function applyTarget() {
-  cmd("set_target", {values: values("t", 6)});
+function moveCartesianInput() {
+  cmd("move_cartesian_input", {values: values("t", 6)});
+}
+
+function moveJointInput() {
+  cmd("move_joint_input", {
+    values: Array.from({length: jointNames.length}, (_, index) => Number($("jointTarget" + index).value)),
+  }).then(result => { if (!result) jointInputDirty = false; });
+}
+
+function moveNullspaceInput() {
+  cmd("move_nullspace_input", {delta_degrees: Number($("nullTarget").value)});
 }
 
 function solverPayload() {
@@ -263,6 +285,36 @@ function deleteProfile(name) {
   cmd("delete_configuration", {name});
 }
 
+function coordinateValues(id) {
+  const values = $(id).value.split(",").map(value => Number(value.trim()));
+  if (values.length !== 6 || values.some(value => !Number.isFinite(value))) {
+    setMessage("坐标系位姿请输入 6 个逗号分隔的数值", true);
+    return null;
+  }
+  return values;
+}
+
+function createCoordinateFrame(kind) {
+  const base = kind === "base";
+  const name = $(base ? "baseFrameName" : "tcpFrameName").value.trim();
+  const values = coordinateValues(base ? "baseFrameValues" : "tcpFrameValues");
+  if (!name || !values) return;
+  cmd(base ? "create_base_frame" : "create_tcp_frame", {name, values});
+}
+
+function selectCoordinateFrames() {
+  cmd("select_coordinate_frames", {
+    base: $("baseFrameSelect").value,
+    tcp: $("tcpFrameSelect").value,
+  });
+}
+
+function renderCoordinateFrames(frames) {
+  const option = (frame, active) => `<option value="${escapeHtml(frame.name)}" ${frame.name === active ? "selected" : ""}>${escapeHtml(frame.name)}</option>`;
+  $("baseFrameSelect").innerHTML = frames.bases.map(frame => option(frame, frames.active_base)).join("");
+  $("tcpFrameSelect").innerHTML = frames.tcps.map(frame => option(frame, frames.active_tcp)).join("");
+}
+
 function renderProfiles(configuration) {
   const active = configuration.active;
   const label = active ? `当前：${active}` : "未调用配置";
@@ -312,7 +364,7 @@ function renderTeachTable() {
   const pageCount = Math.max(1, Math.ceil(points.length / pageSize));
   teachPage = Math.max(0, Math.min(teachPage, pageCount - 1));
   const shown = points.slice(teachPage * pageSize, teachPage * pageSize + pageSize);
-  let html = `<div class="teach-head"><span>选</span><span>点位</span><span>指令</span><span>关节角度 (deg)</span><span>笛卡尔位姿 (m / deg)</span><span>运动</span><span>编辑</span></div>`;
+  let html = `<div class="teach-head"><span>选</span><span>点位</span><span>指令</span><span>关节角度 (deg)</span><span>笛卡尔位姿 (m / deg)</span><span>速度</span><span>运动</span><span>编辑</span></div>`;
   html += shown.map(point => `
     <div class="teach-point ${point.point_id === selectedPointId ? "selected" : ""}" onclick="selectPoint(${point.point_id})">
       <input type="checkbox" ${point.checked ? "checked" : ""} onclick="event.stopPropagation();togglePoint(${point.point_id},this.checked)">
@@ -320,6 +372,7 @@ function renderTeachTable() {
       <select class="point-motion ${point.motion_type.toLowerCase()}" onclick="event.stopPropagation()" onchange="changePointMotion(${point.point_id},this.value)"><option value="MOVL" ${point.motion_type === "MOVL" ? "selected" : ""}>MOVL</option><option value="MOVJ" ${point.motion_type === "MOVJ" ? "selected" : ""}>MOVJ</option></select>
       <span class="teach-data" title="${escapeHtml(jointSummary(point))}">${escapeHtml(jointSummary(point))}</span>
       <span class="teach-data" title="${escapeHtml(cartesianSummary(point))}">${escapeHtml(cartesianSummary(point))}</span>
+      <input class="teach-speed" type="number" min="1" max="100" step="1" value="${Number(point.speed_percent)}" onclick="event.stopPropagation()" onchange="changePointSpeed(${point.point_id},this.value)">
       <button class="run" onclick="event.stopPropagation();moveTeachPoint(${point.point_id})">运动</button>
       <button onclick="event.stopPropagation();selectPoint(${point.point_id})">修改</button>
     </div>`).join("");
@@ -352,6 +405,7 @@ function pointPayload(point, motionType = point.motion_type) {
     motion_type: motionType,
     joint_values: point.joint_values,
     cartesian_values: point.cartesian_values,
+    speed_percent: point.speed_percent,
   };
 }
 
@@ -360,8 +414,37 @@ function changePointMotion(id, motionType) {
   if (point) cmd("update_teach_point", pointPayload(point, motionType));
 }
 
+function changePointSpeed(id, speedPercent) {
+  const point = pointById(id);
+  if (point) cmd("update_teach_point", {...pointPayload(point), speed_percent: Number(speedPercent)});
+}
+
 function moveTeachPoint(id) {
   cmd("move_teach_point", {point_id: id});
+}
+
+function saveTeachPointProfile() {
+  const name = $("teachProfileName").value.trim();
+  if (!name) { setMessage("请输入示教点位配置名称", true); return; }
+  cmd("save_teach_point_profile", {name});
+}
+
+function selectTeachPointProfile() {
+  $("teachProfileName").value = $("teachProfileSelect").value;
+}
+
+function loadTeachPointProfile() {
+  const name = $("teachProfileName").value.trim() || $("teachProfileSelect").value;
+  if (!name) { setMessage("请选择或输入要调用的示教点位配置", true); return; }
+  cmd("load_teach_point_profile", {name});
+}
+
+function renderTeachPointProfiles(program) {
+  const names = program.profiles || [];
+  $("teachProfileState").textContent = program.active_profile ? `当前：${program.active_profile}` : "未调用";
+  $("teachProfileSelect").innerHTML = names.length
+    ? names.map(name => `<option value="${escapeHtml(name)}" ${name === program.active_profile ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")
+    : `<option value="">尚未保存点位配置</option>`;
 }
 
 function renderPointEditor() {
@@ -403,6 +486,7 @@ function updatePoint() {
     motion_type: point.motion_type,
     joint_values: Array.from({length: jointNames.length}, (_, index) => Number($(`editJoint${index}`).value)),
     cartesian_values: Array.from({length: 6}, (_, index) => Number($(`editCartesian${index}`).value)),
+    speed_percent: point.speed_percent,
   });
 }
 
@@ -459,23 +543,30 @@ function render(nextState) {
   $("orierr").textContent = state.orientation_error_degrees?.toFixed(3) ?? "--";
   $("attempts").textContent = state.attempts ?? "--";
   $("dragState").textContent = state.drag_unlocked ? "解锁" : "锁定";
-  if (editing || pending) return;
-
   if (hardware.ip) $("hardwareIp").value = hardware.ip;
 
   const pose = [...state.target.position_m, ...state.target.rpy_degrees];
   pose.forEach((value, index) => {
-    $(`t${index}`).value = value.toFixed(index < 3 ? 4 : 2);
+    if (document.activeElement !== $(`t${index}`)) $(`t${index}`).value = value.toFixed(index < 3 ? 4 : 2);
     $(`h${axes[index].toLowerCase()}`).textContent = value.toFixed(index < 3 ? 4 : 2);
   });
   state.arm_degrees.forEach((value, index) => {
-    $(`j${index}`).textContent = `${value.toFixed(2)}°`;
+    if (!jointInputDirty && document.activeElement !== $(`jointTarget${index}`)) $(`jointTarget${index}`).value = value.toFixed(2);
     $(`nj${index}`).textContent = `${value.toFixed(2)}°`;
   });
   $("nullLamp").className = state.null_space_active ? "on" : "";
   $("nullState").textContent = state.null_space_active ? "TCP 已锁定 · 运动中" : "等待点动";
-  auxNames.forEach((name, index) => $(`a${index}`).textContent = state.auxiliary[name].toFixed(3));
+  auxNames.forEach((name, index) => {
+    const input = $(`auxTarget${index}`);
+    if (!auxInputDirty.has(index) && document.activeElement !== input) {
+      input.value = state.auxiliary[name].toFixed(3);
+    }
+  });
   renderHomeJoints(state.arm_degrees);
+
+  // Motion feedback must keep refreshing while an operator types.  Only
+  // configuration/profile controls are deferred below.
+  if (editing || pending) return;
 
   const settings = state.settings;
   $("live").checked = settings.live;
@@ -502,7 +593,11 @@ function render(nextState) {
   if (activePage === "home" || activePage === "config") {
     renderProfiles(state.configuration);
   }
+  if (activePage === "config") renderCoordinateFrames(state.coordinate_frames);
   if (activePage === "program") renderTeachTable();
+  if (activePage === "program") renderTeachPointProfiles(state.teach_program);
+  if (jointInputDirty && !state.teach_program.running) jointInputDirty = false;
+  if (!state.continuous_jog_running) auxInputDirty.clear();
 }
 
 async function poll() {

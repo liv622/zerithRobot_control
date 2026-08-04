@@ -74,15 +74,28 @@ class CommandDispatcher:
                 )
                 return {"message": "步进点动已执行"}
             if action == "set_target":
-                app.set_target_values(app.require_values(command, 6))
-                return {"message": "TCP 目标已写入"}
+                app.set_target_values(
+                    app.require_values(command, 6),
+                    solve_live=bool(command.get("solve_live", False)),
+                )
+                return {"message": "TCP 输入目标已保存，尚未运动"}
+            if action == "move_cartesian_input":
+                app.move_cartesian_input(app.require_values(command, 6))
+                return {"message": "笛卡尔输入目标已提交插补运动"}
+            if action == "move_joint_input":
+                app.move_joint_input(
+                    app.require_values(command, len(app.model.arm_joint_names))
+                )
+                return {"message": "关节输入目标已提交插补运动"}
+            if action == "move_nullspace_input":
+                app.move_nullspace_input(float(command["delta_degrees"]))
+                return {"message": "零空间输入目标已执行"}
             if action == "jog_target":
                 axis = int(command["axis"])
                 delta = float(command["delta"])
                 if axis not in range(6) or not np.isfinite(delta):
                     raise ValueError("点动轴或增量无效")
-                xyz, rpy = app.controller.target_xyz_rpy()
-                values = np.r_[xyz, rpy]
+                values = app.displayed_target_values()
                 values[axis] += delta
                 app.set_target_values(values)
                 return {"message": f"笛卡尔轴 {axis + 1} 点动完成"}
@@ -128,6 +141,10 @@ class CommandDispatcher:
                 name = str(command["joint"])
                 app.jog_auxiliary(name, float(command["delta"]))
                 return {"message": f"{app.AUX_LABELS[name]}点动完成"}
+            if action == "move_auxiliary_input":
+                name = str(command["joint"])
+                app.move_auxiliary_input(name, float(command["value"]))
+                return {"message": f"{app.AUX_LABELS[name]}已运动到输入目标"}
             if action == "guide_current":
                 app.guide_current()
                 return {"message": "当前关节解已设为臂形参考"}
@@ -154,6 +171,19 @@ class CommandDispatcher:
                 name = str(command["name"])
                 app.delete_configuration(name)
                 return {"message": f"配置文件 {name} 已删除"}
+            if action == "create_base_frame":
+                app.create_base_frame(
+                    str(command["name"]), app.require_values(command, 6)
+                )
+                return {"message": "用户基坐标系已创建"}
+            if action == "create_tcp_frame":
+                app.create_tcp_frame(
+                    str(command["name"]), app.require_values(command, 6)
+                )
+                return {"message": "用户 TCP 坐标系已创建"}
+            if action == "select_coordinate_frames":
+                app.select_frames(str(command["base"]), str(command["tcp"]))
+                return {"message": "位姿显示与运动参考坐标系已切换"}
             if action == "save_teach_point":
                 point = app.teach_program.save_current(
                     str(command["motion_type"]).upper(),
@@ -171,12 +201,14 @@ class CommandDispatcher:
                 motion_type = str(command["motion_type"]).upper()
                 joints = app.require_values({"values": command["joint_values"]}, 7)
                 cartesian = app.require_values({"values": command["cartesian_values"]}, 6)
+                speed_percent = float(command["speed_percent"])
                 point = app.teach_points.update(
                     point.point_id,
                     str(command.get("name", point.name)),
                     motion_type,
                     [float(value) for value in joints],
                     [float(value) for value in cartesian],
+                    speed_percent,
                 )
                 app.teach_program.set_status(f"已修改 {point.name}")
                 return {"message": f"已修改 {point.name} ({point.motion_type})"}
@@ -188,6 +220,14 @@ class CommandDispatcher:
                 app.teach_points.delete(point.point_id)
                 app.teach_program.set_status(f"已删除 {point.name}")
                 return {"message": f"已删除 {point.name}"}
+            if action == "save_teach_point_profile":
+                name = str(command["name"])
+                app.save_teach_point_profile(name)
+                return {"message": f"示教点位配置 {name.strip()} 已保存"}
+            if action == "load_teach_point_profile":
+                name = str(command["name"])
+                app.load_teach_point_profile(name)
+                return {"message": f"示教点位配置 {name} 已调用"}
             if action == "set_teach_point_checked":
                 app.teach_points.set_checked(
                     int(command["point_id"]),

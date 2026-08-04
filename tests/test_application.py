@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -201,6 +202,26 @@ class ApplicationServiceTests(unittest.TestCase):
                 ),
                 0.0005,
             )
+            service.close()
+
+    def test_auxiliary_axis_supports_hold_to_run_motion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            model = RobotModel.from_urdf(URDF)
+            controller = Controller(model, Path(directory) / "last_solution.json")
+            service = RobotApplicationService(
+                model,
+                controller,
+                JsonTeachPointRepository(Path(directory) / "teach_points.json"),
+            )
+            name = "CTU_joint"
+            before = controller.aux[name]
+            service.continuous_jog.start(
+                mode="auxiliary", direction=1, step=10, joint=name
+            )
+            time.sleep(0.04)
+            service.continuous_jog.stop()
+            time.sleep(0.02)
+            self.assertGreater(controller.aux[name], before)
             service.close()
 
 

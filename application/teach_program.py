@@ -31,6 +31,8 @@ class TeachProgramService:
         repository: TeachPointRepository,
         settings: ApplicationSettings,
         events: ApplicationEvents,
+        display_pose: Callable[[np.ndarray], list[float]] | None = None,
+        default_target: Callable[[list[float] | np.ndarray], np.ndarray] | None = None,
     ) -> None:
         self.model = model
         self.controller = controller
@@ -41,6 +43,17 @@ class TeachProgramService:
         self._cancel = threading.Event()
         self._running = threading.Event()
         self.status = "待机"
+        self.display_pose = display_pose or self._default_display_pose
+        self.default_target = default_target or self._default_target
+
+    def _default_display_pose(self, pose: np.ndarray) -> list[float]:
+        xyz = pose[:3, 3]
+        rpy = Rotation.from_matrix(pose[:3, :3]).as_euler("xyz", degrees=True)
+        return [float(value) for value in np.r_[xyz, rpy]]
+
+    def _default_target(self, values: list[float] | np.ndarray) -> np.ndarray:
+        data = np.asarray(values, dtype=float)
+        return self.model.pose(data[:3], Rotation.from_euler("xyz", data[3:], degrees=True))
 
     @property
     def running(self) -> bool:
@@ -58,12 +71,7 @@ class TeachProgramService:
 
     def current_cartesian_values(self) -> list[float]:
         actual = self.model.tcp_pose(self.controller.arm, self.controller.aux)
-        xyz = actual[:3, 3]
-        rpy = Rotation.from_matrix(actual[:3, :3]).as_euler(
-            "xyz",
-            degrees=True,
-        )
-        return [float(value) for value in np.r_[xyz, rpy]]
+        return self.display_pose(actual)
 
     def save_current(self, motion_type: str, name: str = "") -> TeachPoint:
         point = self.repository.add(
@@ -71,6 +79,7 @@ class TeachProgramService:
             self.current_joint_values(),
             self.current_cartesian_values(),
             name,
+            self.settings.speed_percent,
         )
         self.set_status(f"已保存 {point.name} ({point.motion_type})")
         return point
@@ -81,16 +90,13 @@ class TeachProgramService:
 
     def _play_movl(self, point: TeachPoint, *, immediate: bool = False) -> bool:
         values = np.asarray(point.values, dtype=float)
-        target = self.model.pose(
-            values[:3],
-            Rotation.from_euler("xyz", values[3:], degrees=True),
-        )
+        target = self.default_target(values)
         self.set_status(f"{point.name} MOVL 预检中…")
         current = self.model.tcp_pose(
             self.controller.arm,
             self.controller.aux,
         )
-        speed_scale = self.settings.speed_percent / 100.0
+        speed_scale = point.speed_percent / 100.0
         distance_mm = float(
             np.linalg.norm(target[:3, 3] - current[:3, 3]) * 1000.0
         )
@@ -170,7 +176,7 @@ class TeachProgramService:
 
     def _play_movj(self, point: TeachPoint, *, immediate: bool = False) -> bool:
         target_arm = np.deg2rad(np.asarray(point.values, dtype=float))
-        speed_scale = self.settings.speed_percent / 100.0
+        speed_scale = point.speed_percent / 100.0
         required_duration = float(
             np.max(np.abs(target_arm - self.controller.arm))
             / np.deg2rad(
@@ -218,6 +224,7 @@ class TeachProgramService:
                 point,
                 joint_values=point.joint_values.copy(),
                 cartesian_values=point.cartesian_values.copy(),
+                speed_percent=point.speed_percent,
             )
             for point in self.repository.points
             if point.checked
@@ -299,3 +306,49 @@ class TeachProgramService:
                 self._running.clear()
 
         threading.Thread(target=run_one, name="e1pro-move-teach-point", daemon=True).start()
+
+    def move_values(
+        self,
+        motion_type: str,
+        *,
+        joint_values: list[float],
+        cartesian_values: list[float],
+        name: str,
+    ) -> None:
+        """Execute an unsaved input target through the same interpolators."""
+        if motion_type not in {"MOVL", "MOVJ"}:
+            raise ValueError("运动类型必须为 MOVL 或 MOVJ")
+        point = TeachPoint(
+            point_id=0,
+            name=name,
+            motion_type=motion_type,
+            joint_values=np.asarray(joint_values, dtype=float),
+            cartesian_values=np.asarray(cartesian_values, dtype=float),
+            speed_percent=self.settings.speed_percent,
+        )
+        if point.motion_type == "MOVL":
+            point.cartesian_values = np.asarray(cartesian_values, dtype=float)
+        self._move_unsaved(point)
+
+    def _move_unsaved(self, point: TeachPoint) -> None:
+        if self.running or self.motion_blocked():
+            raise ValueError("当前有运动或 IK 正在执行")
+
+        def run_one() -> None:
+            self._running.set()
+            self._cancel.clear()
+            try:
+                completed = (
+                    self._play_movl(point, immediate=True)
+                    if point.motion_type == "MOVL"
+                    else self._play_movj(point, immediate=True)
+                )
+                self.set_status(
+                    f"已到达 {point.name}" if completed else "输入目标运动已停止"
+                )
+            except (TrajectoryError, ValueError) as exc:
+                self.set_status(f"{point.name} 运动失败：{exc}")
+            finally:
+                self._running.clear()
+
+        threading.Thread(target=run_one, name="e1pro-move-input-target", daemon=True).start()

@@ -27,6 +27,8 @@ class ContinuousJogService:
         get_status: Callable[[], str],
         settings: ApplicationSettings,
         null_space: NullSpaceMotionService,
+        displayed_target_values: Callable[[], np.ndarray],
+        set_displayed_target_values: Callable[..., None],
     ) -> None:
         self.model = model
         self.controller = controller
@@ -37,6 +39,8 @@ class ContinuousJogService:
         self.get_status = get_status
         self.settings = settings
         self.null_space = null_space
+        self.displayed_target_values = displayed_target_values
+        self.set_displayed_target_values = set_displayed_target_values
         self._cancel = threading.Event()
         self._running = threading.Event()
 
@@ -73,13 +77,11 @@ class ContinuousJogService:
                     )
                     speed = min(step_value * 10.0, maximum) * speed_scale
                     increment = speed * period_s
-                    xyz, rpy = self.controller.target_xyz_rpy()
-                    values = np.r_[xyz, rpy]
+                    values = self.displayed_target_values()
                     values[axis] += direction * increment * (
                         0.001 if axis < 3 else 1.0
                     )
-                    self.controller.set_target_xyz_rpy(values[:3], values[3:])
-                    self.events.target_changed()
+                    self.set_displayed_target_values(values, solve_live=False)
                     solution = self.solve(
                         lock_orientation_override=True,
                         emit_motion=True,
@@ -112,7 +114,7 @@ class ContinuousJogService:
                     self.events.target_changed()
                     self.events.scene_changed()
                     self.events.motion_sample(self.controller.arm.copy())
-                else:
+                elif mode == "nullspace":
                     speed = min(
                         step_value * 10.0,
                         self.settings.max_joint_speed_deg_s,
@@ -123,6 +125,24 @@ class ContinuousJogService:
                     except ValueError as exc:
                         self.set_status(str(exc))
                         return
+                else:
+                    name = self.model.aux_joint_names[axis]
+                    lower, upper = self.model.auxiliary_limits[name]
+                    speed = min(
+                        step_value * 10.0,
+                        self.settings.max_joint_speed_deg_s,
+                    ) * speed_scale * 0.001
+                    previous = float(self.controller.aux.get(name, 0.0))
+                    self.controller.aux[name] = float(np.clip(
+                        previous + direction * speed * period_s,
+                        lower,
+                        upper,
+                    ))
+                    if self.controller.aux[name] == previous:
+                        self.set_status("连续点动停止：已到附加轴限位")
+                        return
+                    self.events.auxiliary_changed()
+                    self.events.scene_changed()
                 elapsed = time.monotonic() - tick_started
                 cancel.wait(max(0.0, period_s - elapsed))
         finally:
@@ -147,9 +167,9 @@ class ContinuousJogService:
     ) -> None:
         if self.program_running():
             raise ValueError("示教程序运行期间不能连续点动")
-        if mode not in {"cartesian", "joint", "nullspace"}:
+        if mode not in {"cartesian", "joint", "nullspace", "auxiliary"}:
             raise ValueError(
-                "连续点动模式必须是 cartesian、joint 或 nullspace"
+                "连续点动模式必须是 cartesian、joint、nullspace 或 auxiliary"
             )
         if direction not in {-1, 1}:
             raise ValueError("连续点动方向必须是 -1 或 1")
@@ -170,10 +190,15 @@ class ContinuousJogService:
                 raise ValueError("未知机械臂关节")
             axis_index = self.model.arm_joint_names.index(str(joint))
             label = f"J{axis_index + 1}"
-        else:
+        elif mode == "nullspace":
             axis_index = 0
             self.null_space.begin()
             label = "零空间"
+        else:
+            if joint not in self.model.aux_joint_names:
+                raise ValueError("未知附加轴")
+            axis_index = self.model.aux_joint_names.index(str(joint))
+            label = self.model.auxiliary_labels[str(joint)]
 
         self._cancel.set()
         cancel = threading.Event()
@@ -215,13 +240,11 @@ class ContinuousJogService:
                 self.controller.arm,
                 self.controller.aux,
             )
-            xyz, rpy = self.controller.target_xyz_rpy()
-            values = np.r_[xyz, rpy]
+            values = self.displayed_target_values()
             values[int(axis)] += direction * step * (
                 0.001 if axis < 3 else 1.0
             )
-            self.controller.set_target_xyz_rpy(values[:3], values[3:])
-            self.events.target_changed()
+            self.set_displayed_target_values(values, solve_live=False)
             solution = self.solve(
                 lock_orientation_override=True,
                 emit_motion=True,

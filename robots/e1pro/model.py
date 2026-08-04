@@ -12,6 +12,7 @@ from scipy.spatial.transform import Rotation
 ARM_JOINTS = tuple(f"Joint{i}_J" for i in range(1, 8))
 AUX_JOINTS = (
     "platform_joint",
+    "CTU_joint",
     "box01_joint",
     "left_dainchi_joint",
     "right_dianchi_joint",
@@ -27,6 +28,7 @@ INITIAL_CONFIGURATION: dict[str, float] = {
     "Joint6_J": -0.61,
     "Joint7_J": 0.0,
     "platform_joint": 0.0,
+    "CTU_joint": 0.0,
     "box01_joint": 0.0,
     "left_dainchi_joint": 0.0,
     "right_dianchi_joint": 0.0,
@@ -66,6 +68,7 @@ class RobotModel:
     tcp_link_name = "zhijian_link"
     auxiliary_limits = {
         "platform_joint": (-0.1, 0.5),
+        "CTU_joint": (-3.1416, 3.1416),
         "box01_joint": (-0.7, 0.7),
         "left_dainchi_joint": (0.0, 0.5),
         "right_dianchi_joint": (0.0, 0.5),
@@ -73,6 +76,7 @@ class RobotModel:
     }
     auxiliary_labels = {
         "platform_joint": "机械臂/平台升降",
+        "CTU_joint": "CTU 旋转轴",
         "box01_joint": "料箱 01 横移",
         "left_dainchi_joint": "左电池升降",
         "right_dianchi_joint": "右电池升降",

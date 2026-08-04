@@ -20,7 +20,9 @@ class JsonTeachPointRepository:
         if not self.path.exists():
             return
         payload = json.loads(self.path.read_text(encoding="utf-8"))
-        raw_points = payload.get("points", [])
+        self._replace_from_raw(payload.get("points", []))
+
+    def _replace_from_raw(self, raw_points: object) -> None:
         if not isinstance(raw_points, list):
             raise ValueError("teach_points.json 中的 points 必须是数组")
         loaded: list[TeachPoint] = []
@@ -40,6 +42,7 @@ class JsonTeachPointRepository:
                 motion_type=motion_type,
                 joint_values=list(joints),
                 cartesian_values=list(cartesian),
+                speed_percent=float(item.get("speed_percent", 30.0)),
                 checked=bool(item.get("checked", True)),
             )
             point.validate()
@@ -47,8 +50,12 @@ class JsonTeachPointRepository:
         self.points = loaded
         self._next_id = max((point.point_id for point in loaded), default=0) + 1
 
+    def replace(self, points: list[dict]) -> None:
+        self._replace_from_raw(points)
+        self.save()
+
     def save(self) -> None:
-        payload = {"version": 2, "points": [asdict(point) for point in self.points]}
+        payload = {"version": 3, "points": [asdict(point) for point in self.points]}
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
@@ -62,6 +69,7 @@ class JsonTeachPointRepository:
         joint_values: list[float],
         cartesian_values: list[float],
         name: str = "",
+        speed_percent: float = 30.0,
     ) -> TeachPoint:
         point = TeachPoint(
             point_id=self._next_id,
@@ -69,6 +77,7 @@ class JsonTeachPointRepository:
             motion_type=motion_type.upper(),
             joint_values=joint_values,
             cartesian_values=cartesian_values,
+            speed_percent=speed_percent,
         )
         point.validate()
         self._next_id += 1
@@ -89,6 +98,7 @@ class JsonTeachPointRepository:
         motion_type: str,
         joint_values: list[float],
         cartesian_values: list[float],
+        speed_percent: float = 30.0,
     ) -> TeachPoint:
         point = self.get(point_id)
         updated = TeachPoint(
@@ -97,6 +107,7 @@ class JsonTeachPointRepository:
             motion_type=motion_type.upper(),
             joint_values=joint_values,
             cartesian_values=cartesian_values,
+            speed_percent=speed_percent,
             checked=point.checked,
         )
         updated.validate()
