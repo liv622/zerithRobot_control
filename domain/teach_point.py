@@ -28,14 +28,14 @@ class TeachPoint:
         """Execution vector retained for MOVL/MOVJ trajectory code."""
         return self.cartesian_values if self.motion_type == "MOVL" else self.joint_values
 
-    def validate(self) -> None:
+    def validate(self, joint_count: int = 7) -> None:
         if self.motion_type not in MOTION_TYPES:
             raise ValueError("运动类型必须是 MOVL 或 MOVJ")
         joints = np.asarray(self.joint_values, dtype=float)
         cartesian = np.asarray(self.cartesian_values, dtype=float)
-        if joints.shape != (7,) or not np.all(np.isfinite(joints)):
+        if joints.shape != (joint_count,) or not np.all(np.isfinite(joints)):
             raise ValueError(
-                "示教点必须包含 7 个有限关节角度"
+                f"示教点必须包含 {joint_count} 个有限关节值"
             )
         if cartesian.shape != (6,) or not np.all(np.isfinite(cartesian)):
             raise ValueError("示教点必须包含 6 个有限笛卡尔位姿值")

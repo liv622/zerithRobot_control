@@ -10,8 +10,9 @@ from domain import TeachPoint
 
 
 class JsonTeachPointRepository:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, joint_count: int = 7) -> None:
         self.path = path
+        self.joint_count = joint_count
         self.points: list[TeachPoint] = []
         self._next_id = 1
         self.load()
@@ -34,7 +35,7 @@ class JsonTeachPointRepository:
             if joints is None or cartesian is None:
                 # Keep legacy points executable in their original mode. New
                 # points always persist both representations.
-                joints = legacy_values if motion_type == "MOVJ" else [0.0] * 7
+                joints = legacy_values if motion_type == "MOVJ" else [0.0] * self.joint_count
                 cartesian = legacy_values if motion_type == "MOVL" else [0.0] * 6
             point = TeachPoint(
                 point_id=int(item["point_id"]),
@@ -45,7 +46,7 @@ class JsonTeachPointRepository:
                 speed_percent=float(item.get("speed_percent", 30.0)),
                 checked=bool(item.get("checked", True)),
             )
-            point.validate()
+            point.validate(self.joint_count)
             loaded.append(point)
         self.points = loaded
         self._next_id = max((point.point_id for point in loaded), default=0) + 1
@@ -79,7 +80,7 @@ class JsonTeachPointRepository:
             cartesian_values=cartesian_values,
             speed_percent=speed_percent,
         )
-        point.validate()
+        point.validate(self.joint_count)
         self._next_id += 1
         self.points.append(point)
         self.save()
@@ -110,7 +111,7 @@ class JsonTeachPointRepository:
             speed_percent=speed_percent,
             checked=point.checked,
         )
-        updated.validate()
+        updated.validate(self.joint_count)
         self.points[self.points.index(point)] = updated
         self.save()
         return updated

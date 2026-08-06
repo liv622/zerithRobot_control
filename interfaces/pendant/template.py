@@ -5,13 +5,13 @@ PENDANT_HTML = """<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>zerithRobot</title>
+  <title>Robot</title>
   <link rel="stylesheet" href="/assets/pendant.css">
 </head>
 <body>
 <div class="screen">
   <header class="topbar">
-    <div class="brand"><b>zerithRobot</b><span>协作机器人示教器</span></div>
+    <div class="brand"><b>Robot</b><span>协作机器人示教器</span></div>
     <div class="top-status">
       <span class="chip"><i id="lamp" class="lamp"></i><b id="connection">仿真离线</b></span>
       <span class="chip">手动 · 仿真</span>

@@ -14,7 +14,7 @@ python app.py --smoke-test
 python teach_pendant.py --open
 ```
 
-示教器脚本会自动启动 Viser 仿真、等待通信接口就绪，并打开 zerithRobot 页面。
+示教器脚本会自动启动 Viser 仿真、等待通信接口就绪，并打开 Robot 页面。
 默认 Viser 监听 `8080`，示教器监听 `8090`。
 
 如果只需要单独运行三维仿真或执行无界面检查，才使用：

@@ -49,7 +49,7 @@ infrastructure ──实现──> application/ports
 - `communication/` 只通过状态读取和命令处理接口与应用交互。
 - `interfaces/` 接收 `RobotPlugin`，不直接导入 `robots.e1pro`。
 - `interfaces/simulator/` 是只读 Viser 场景适配器；它不创建 GUI 控件，所有
-  运动命令和参数设置只从 zerithRobot 示教器发起。
+  运动命令和参数设置只从 Robot 示教器发起。
 - 示教器页面、样式和交互脚本分离；业务规则仍由 `application/` 执行。
 - `robots/<型号>/` 保存该型号的 URDF 约定、运动学模型和专属自检。
 

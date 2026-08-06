@@ -24,6 +24,7 @@ def _host_port(url: str, default_port: int) -> tuple[str, int]:
 def _start_simulator(
     *,
     robot: str,
+    urdf: str | None,
     simulator_url: str,
     viser_url: str,
 ) -> tuple[subprocess.Popen, str]:
@@ -57,6 +58,7 @@ def _start_simulator(
             "--control-port",
             str(control_port),
         ]
+        + (["--urdf", urdf] if urdf else [])
     )
     state_url = simulator_url.rstrip("/") + "/api/state"
     deadline = time.monotonic() + 15.0
@@ -114,6 +116,10 @@ def main() -> int:
         help="机器人型号插件",
     )
     parser.add_argument(
+        "--urdf",
+        help="要加载的 URDF（传给仿真器）；指定后按 URDF 自动识别机械臂链和末端",
+    )
+    parser.add_argument(
         "--no-simulator",
         action="store_true",
         help="不自动启动仿真，连接已经运行的外部仿真进程",
@@ -126,6 +132,7 @@ def main() -> int:
         if not args.no_simulator:
             simulator, resolved_viser_url = _start_simulator(
                 robot=args.robot,
+                urdf=args.urdf,
                 simulator_url=args.sim_url,
                 viser_url=args.viser_url,
             )

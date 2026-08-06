@@ -13,19 +13,19 @@ from robot_framework.controller import Controller
 from robot_framework.solver import IKSolver
 from trajectory import plan_trajectory
 
-URDF_RELATIVE_PATH = Path("e1_pro_full/urdf")
+URDF_RELATIVE_PATH = Path("e1_pro_full")
 
 
 def resolve_urdf_path(project_root: Path) -> Path:
-    """Return the newest E1-PRO URDF delivered in the resource folder."""
+    """Return the newest URDF below the delivered robot-resource directory."""
     directory = project_root / URDF_RELATIVE_PATH
     candidates = sorted(
-        directory.glob("E1-PRO*.urdf"),
+        directory.rglob("E1-PRO*.urdf"),
         key=lambda path: (path.stat().st_mtime_ns, path.name),
         reverse=True,
     )
     if not candidates:
-        raise FileNotFoundError(f"未在 {directory} 找到 E1-PRO URDF 文件")
+        raise FileNotFoundError(f"未在 {directory} 找到 URDF 文件")
     return candidates[0]
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""zerithRobot fixed-screen teach pendant entry point."""
+"""Robot fixed-screen teach pendant entry point."""
 
 from entrypoints.pendant import main
 

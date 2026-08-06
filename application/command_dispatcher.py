@@ -199,7 +199,10 @@ class CommandDispatcher:
             if action == "update_teach_point":
                 point = app.teach_points.get(int(command["point_id"]))
                 motion_type = str(command["motion_type"]).upper()
-                joints = app.require_values({"values": command["joint_values"]}, 7)
+                joints = app.require_values(
+                    {"values": command["joint_values"]},
+                    len(app.model.arm_joint_names),
+                )
                 cartesian = app.require_values({"values": command["cartesian_values"]}, 6)
                 speed_percent = float(command["speed_percent"])
                 point = app.teach_points.update(
