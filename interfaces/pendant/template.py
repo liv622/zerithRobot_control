@@ -86,6 +86,10 @@ PENDANT_HTML = """<!doctype html>
 
       <section id="page-move" class="page">
         <div class="page-head"><div><h1>运动示教</h1><p>数值输入确认后立即插补运动；长按方向键连续运动</p></div>
+          <div class="segmented arm-switch" id="armSwitch" style="display:none">
+            <button class="active" data-arm="left" onclick="setActiveArm('left')">左手</button>
+            <button data-arm="right" onclick="setActiveArm('right')">右手</button>
+          </div>
           <div class="segmented move-tabs">
             <button class="active" data-mode="cartesian">笛卡尔</button>
             <button data-mode="joint">关节</button>

@@ -17,7 +17,7 @@ import yourdfpy
 from scipy.spatial.transform import Rotation
 
 from .model_protocol import RobotModelProtocol
-from .solver import IKSolution
+from .solver import IKSolution, IKSolver
 
 
 def _velocity_limit_residual(
@@ -325,4 +325,10 @@ class PyRokiIKSolver:
 
 
 def create_solver(model: RobotModelProtocol):
+    # PyRoki caches the active-arm mask and target-link index at construction.
+    # A dual-arm model changes which arm is active at runtime, so the cached
+    # values would go stale; its six-joint arms are also non-redundant, where
+    # the SciPy bounded solver plus multi-start recovery is sufficient.
+    if getattr(model, "dual_arm", False):
+        return IKSolver(model)
     return PyRokiIKSolver(model)

@@ -58,14 +58,22 @@ def main(project_root: Path | None = None) -> int:
         if not urdf_path.is_file():
             print(f"URDF 不存在：{urdf_path}", file=sys.stderr)
             return 2
-        from robots.generic import GenericUrdfRobotModel
         from dataclasses import replace
 
+        from robots.e1pro_dual.model import DualArmUrdfModel
+        from robots.generic import GenericUrdfRobotModel
+        from urdf import is_dual_arm_urdf
+
+        load_model = (
+            DualArmUrdfModel.from_urdf
+            if is_dual_arm_urdf(urdf_path)
+            else GenericUrdfRobotModel.from_urdf
+        )
         plugin = replace(
             plugin,
             key="urdf",
             display_name=urdf_path.stem,
-            load_model=GenericUrdfRobotModel.from_urdf,
+            load_model=load_model,
             urdf_relative_path=urdf_path,
         )
     if args.smoke_test:

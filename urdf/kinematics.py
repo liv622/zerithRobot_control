@@ -257,3 +257,138 @@ def parse_urdf_chain(urdf_path: Path) -> UrdfChain:
         terminal_link=terminal,
         link_names=link_names,
     )
+
+
+@dataclass(frozen=True)
+class DualArmChains:
+    """The shared mast plus two symmetric movable chains of a dual-arm URDF.
+
+    ``mid_joints`` runs from the root to the branch joint; ``left_joints`` and
+    ``right_joints`` continue from the branch to each arm's terminal link.
+    Fixed joints are kept in each run so the full geometric chain is available.
+    """
+
+    urdf_path: Path
+    robot_name: str
+    mid_joints: tuple[UrdfJoint, ...]
+    left_joints: tuple[UrdfJoint, ...]
+    right_joints: tuple[UrdfJoint, ...]
+    left_terminal: str
+    right_terminal: str
+
+    @property
+    def mid_movable_names(self) -> tuple[str, ...]:
+        return tuple(j.name for j in self.mid_joints if j.movable)
+
+    @property
+    def left_movable_names(self) -> tuple[str, ...]:
+        return tuple(j.name for j in self.left_joints if j.movable)
+
+    @property
+    def right_movable_names(self) -> tuple[str, ...]:
+        return tuple(j.name for j in self.right_joints if j.movable)
+
+
+def _common_prefix_length(chains: list[tuple[UrdfJoint, ...]]) -> int:
+    """Length of the longest common joint-name prefix across ``chains``."""
+    if not chains:
+        return 0
+    first = chains[0]
+    for index in range(len(first)):
+        for chain in chains[1:]:
+            if index >= len(chain) or chain[index].name != first[index].name:
+                return index
+    return len(first)
+
+
+def detect_dual_arm_chains(urdf_path: Path) -> DualArmChains | None:
+    """Identify a dual-arm URDF as a shared mast plus two movable arms.
+
+    A URDF is treated as dual-arm when at least two root-to-leaf chains share a
+    non-trivial movable prefix (the mast) and then diverge into two suffixes
+    each carrying six or more movable joints.  Purely fixed leaves are ignored,
+    and more than two movable branches disqualify the file.
+    """
+    path = Path(urdf_path)
+    root = ElementTree.parse(path).getroot()
+    if root.tag != "robot":
+        raise ValueError("URDF 根节点必须是 <robot>")
+    link_names = tuple(
+        node.get("name") for node in root.findall("link") if node.get("name")
+    )
+    links = set(link_names)
+    parent_of: dict[str, tuple[UrdfJoint, str]] = {}
+    parent_links: set[str] = set()
+    for node in root.findall("joint"):
+        joint, parent_name, child_name = _parse_joint(node)
+        if child_name in parent_of:
+            raise ValueError(f"URDF 不是树形结构：{child_name} 有多个父关节")
+        parent_of[child_name] = (joint, parent_name)
+        parent_links.add(parent_name)
+    leaves = links - parent_links
+
+    def chain_to(link: str) -> tuple[UrdfJoint, ...]:
+        chain: list[UrdfJoint] = []
+        visited: set[str] = set()
+        current = link
+        while current in parent_of:
+            if current in visited:
+                raise ValueError(f"URDF 关节链存在环：{current}")
+            visited.add(current)
+            joint, current = parent_of[current]
+            chain.append(joint)
+        return tuple(reversed(chain))
+
+    movable_chains: list[tuple[str, tuple[UrdfJoint, ...]]] = []
+    for leaf in leaves:
+        chain = chain_to(leaf)
+        if any(joint.movable for joint in chain):
+            movable_chains.append((leaf, chain))
+    if len(movable_chains) < 2:
+        return None
+
+    prefix_length = _common_prefix_length([chain for _, chain in movable_chains])
+    if prefix_length == 0:
+        return None
+
+    groups: dict[str, list[tuple[str, tuple[UrdfJoint, ...]]]] = {}
+    for leaf, chain in movable_chains:
+        suffix = chain[prefix_length:]
+        if not suffix or not any(joint.movable for joint in suffix):
+            continue
+        groups.setdefault(suffix[0].name, []).append((leaf, chain))
+    if len(groups) != 2:
+        return None
+
+    # Order the two arms deterministically (leaf iteration order is not), so
+    # the returned chains are stable across hash seeds and processes.
+    arms = [groups[key] for key in sorted(groups)]
+    if len(arms[0]) != 1 or len(arms[1]) != 1:
+        return None
+    (left_terminal, left_chain), = arms[0]
+    (right_terminal, right_chain), = arms[1]
+
+    reference = movable_chains[0][1]
+    mid = reference[:prefix_length]
+    left = left_chain[prefix_length:]
+    right = right_chain[prefix_length:]
+    if not any(joint.movable for joint in mid):
+        return None
+    if sum(joint.movable for joint in left) < 6:
+        return None
+    if sum(joint.movable for joint in right) < 6:
+        return None
+    return DualArmChains(
+        urdf_path=path,
+        robot_name=root.get("name") or path.stem,
+        mid_joints=mid,
+        left_joints=left,
+        right_joints=right,
+        left_terminal=left_terminal,
+        right_terminal=right_terminal,
+    )
+
+
+def is_dual_arm_urdf(urdf_path: Path) -> bool:
+    """Return whether ``urdf_path`` describes a dual-arm robot."""
+    return detect_dual_arm_chains(urdf_path) is not None

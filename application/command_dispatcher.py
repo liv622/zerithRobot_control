@@ -171,6 +171,11 @@ class CommandDispatcher:
                         f"关节空间变化 {difference:.3f} rad"
                     )
                 }
+            if action == "set_active_arm":
+                side = str(command["side"])
+                app.set_active_arm(side)
+                label = "左手" if side == "left" else "右手"
+                return {"message": f"已切换到{label}"}
             if action == "motion_settings":
                 app.update_motion_settings(command)
                 return {"message": "全局速度与延时参数已应用"}

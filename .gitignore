@@ -5,3 +5,5 @@ __pycache__/
 .ruff_cache/
 last_solution.json
 teach_points.json
+log.txt
+logs/

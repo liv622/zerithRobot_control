@@ -15,6 +15,8 @@ let jointInputDirty = false;
 let auxInputDirty = new Set();
 let activePage = "home";
 let polling = false;
+let activeArm = "";
+let urdfReloading = false;
 const $ = id => document.getElementById(id);
 
 function buildStaticControls() {
@@ -175,6 +177,11 @@ function setMessage(text, bad = false) {
   $("message").textContent = text;
   $("message").className = `message${bad ? " bad" : ""}`;
   $("diagnosticMessage").textContent = `${new Date().toLocaleTimeString("zh-CN", {hour12: false})}　${text}`;
+}
+
+function setActiveArm(side) {
+  if (side === activeArm) return;
+  cmd("set_active_arm", {side});
 }
 
 function cartesianStep() {
@@ -383,6 +390,9 @@ function selectUrdf() {
     setMessage("没有可加载的 URDF", true);
     return;
   }
+  urdfReloading = true;
+  $("connection").textContent = "模型切换中";
+  setMessage("正在关闭旧场景并加载新机器人模型…");
   cmd("select_urdf", {path}).then(result => {
     if (!result) return;
     // The selected model has a new joint list and potentially a new Viser
@@ -391,12 +401,24 @@ function selectUrdf() {
     jointInputDirty = false;
     auxInputDirty.clear();
     const frame = $("viserFrame");
-    if (result.viser_url) {
+    if (result.viser_url && result.reloaded !== false) {
+      // A restarted Viser server can retain the same host/port.  Give the
+      // iframe a fresh URL so its old, closed WebSocket is never reused.
+      const sceneUrl = new URL(result.viser_url, window.location.href);
+      sceneUrl.searchParams.set("reload", String(Date.now()));
       frame.dataset.src = result.viser_url;
-      frame.src = result.viser_url;
+      frame.src = sceneUrl.href;
+    } else if (result.viser_url) {
+      // The selected model is already running; keep its live scene intact.
+      frame.dataset.src = result.viser_url;
     } else if (frame.getAttribute("src") !== "about:blank") {
       frame.src = frame.dataset.src;
     }
+  }).finally(async () => {
+    urdfReloading = false;
+    // Do not wait for the 350 ms timer: refresh the new robot's joint list
+    // and online state as soon as the reload request has completed.
+    await poll();
   });
 }
 
@@ -636,6 +658,20 @@ function renderHomeJoints(arm) {
 
 function render(nextState) {
   state = nextState;
+  const armSwitch = $("armSwitch");
+  const detectedArm = state.robot.active_arm || "";
+  if (armSwitch) {
+    armSwitch.style.display = detectedArm ? "" : "none";
+    armSwitch.querySelectorAll("button").forEach(button =>
+      button.classList.toggle("active", button.dataset.arm === detectedArm));
+  }
+  // Switching arms rebuilds the joint/aux panels around the new active arm.
+  if (detectedArm && detectedArm !== activeArm) {
+    activeArm = detectedArm;
+    robotControlsBuilt = false;
+    jointInputDirty = false;
+    auxInputDirty.clear();
+  }
   if (!robotControlsBuilt) buildRobotControls(state.robot);
   $("lamp").className = "lamp on";
   $("connection").textContent = "仿真在线";
@@ -725,6 +761,11 @@ async function poll() {
     const data = await api("/api/state");
     render(data.state);
   } catch (error) {
+    if (urdfReloading) {
+      $("lamp").className = "lamp";
+      $("connection").textContent = "模型切换中";
+      return;
+    }
     $("lamp").className = "lamp";
     $("connection").textContent = "仿真离线";
     setMessage(`通信失败：${error.message}`, true);

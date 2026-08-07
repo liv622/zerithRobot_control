@@ -5,9 +5,13 @@ from __future__ import annotations
 from robot_framework.plugin import RobotPlugin
 
 from .e1pro.plugin import E1PRO_PLUGIN
+from .e1pro_dual.plugin import DUAL_ARM_PLUGIN
 
 
-_PLUGINS = {E1PRO_PLUGIN.key: E1PRO_PLUGIN}
+_PLUGINS = {
+    E1PRO_PLUGIN.key: E1PRO_PLUGIN,
+    DUAL_ARM_PLUGIN.key: DUAL_ARM_PLUGIN,
+}
 
 
 def available_robot_keys() -> tuple[str, ...]:

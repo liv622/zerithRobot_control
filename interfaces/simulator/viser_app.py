@@ -142,7 +142,11 @@ def run_ui(
     visual = ViserUrdf(server, urdf, root_node_name="/machine")
 
     def full_cfg() -> np.ndarray:
-        values = dict(model.initial_configuration)
+        values = dict(
+            model.full_configuration(controller.aux)
+            if hasattr(model, "full_configuration")
+            else model.initial_configuration
+        )
         values.update(controller.aux)
         values.update(
             {
@@ -151,6 +155,22 @@ def run_ui(
             }
         )
         return np.array([values.get(name, 0.0) for name in actuated_names])
+
+    # Frame the initial camera on the robot's actual bounding box.  Viser's
+    # default camera keeps a 5 m standoff, which makes a slender or dual-arm
+    # robot (about 1 m across) look like a speck in the viewport.
+    urdf.update_cfg(full_cfg())
+    scene_bounds = urdf.scene.bounds
+    bounds_center = (scene_bounds[0] + scene_bounds[1]) / 2.0
+    bounds_size = float(np.linalg.norm(scene_bounds[1] - scene_bounds[0]))
+    if bounds_size > 1e-6:
+        direction = np.array([1.0, 1.0, 0.6])
+        direction /= float(np.linalg.norm(direction))
+        server.initial_camera.position = tuple(
+            bounds_center + direction * bounds_size * 1.4
+        )
+        server.initial_camera.look_at = tuple(bounds_center)
+        server.initial_camera.up = (0.0, 0.0, 1.0)
 
     visual.update_cfg(full_cfg())
     target_frame = server.scene.add_frame(

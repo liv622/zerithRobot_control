@@ -258,6 +258,8 @@ class RobotApplicationService:
         self.events.settings_changed()
 
     def reset(self) -> None:
+        if hasattr(self.model, "reset"):
+            self.model.reset()
         self.controller.reset()
         self.events.target_changed()
         self.events.guide_changed()
@@ -265,6 +267,38 @@ class RobotApplicationService:
         self.events.scene_changed()
         if self.controller.solution is not None:
             self.events.solution_changed(self.controller.solution)
+
+    def set_active_arm(self, side: str) -> None:
+        """Switch the active arm of a dual-arm model, preserving both arm states.
+
+        The current arm's joints are stored back into the model, then the other
+        arm's stored joints are loaded into the controller.  Switching is
+        rejected while a teach program or continuous jog is running, mirroring
+        the arm-shape switch guard.
+        """
+        if side not in {"left", "right"}:
+            raise ValueError("手臂必须是 left 或 right")
+        if self.teach_program.running or self.continuous_jog.running:
+            raise ValueError("机器人运动期间不能切换手臂")
+        if not self._solve_lock.acquire(blocking=False):
+            raise ValueError("IK 求解进行中，请稍后再切换手臂")
+        try:
+            if not hasattr(self.model, "set_active_arm"):
+                raise ValueError("当前模型不支持双臂切换")
+            self.model.commit_active_arm(self.controller.arm.copy())
+            self.model.set_active_arm(side)
+            self.controller.arm = self.model.stored_arm(side).copy()
+            self.controller.guide = self.controller.arm.copy()
+            self.controller.target = self.model.tcp_pose(
+                self.controller.arm, self.controller.aux
+            )
+            self.controller.solution = None
+            self.controller.save()
+            self.events.target_changed()
+            self.events.guide_changed()
+            self.events.scene_changed()
+        finally:
+            self._solve_lock.release()
 
     def set_auxiliary(
         self,
@@ -541,6 +575,11 @@ class RobotApplicationService:
                 "arm_joint_names": list(self.model.arm_joint_names),
                 "aux_joint_names": list(self.model.aux_joint_names),
                 "auxiliary_labels": self.model.auxiliary_labels,
+                "active_arm": (
+                    self.model.active_arm
+                    if hasattr(self.model, "active_arm")
+                    else ""
+                ),
             },
             "target": {
                 "position_m": [float(value) for value in target_values[:3]],
@@ -655,5 +694,5 @@ class RobotApplicationService:
             self.motion_streamer.drain(timeout_s=0.5)
             self.motion_streamer.close()
         if self.oscilloscope is not None:
-            self.oscilloscope.close()
+            self.oscilloscope.stop()
         self.hardware.disconnect()
