@@ -95,6 +95,20 @@ class CommunicationTests(unittest.TestCase):
         self.assertIn("BRAK1", (Path(__file__).resolve().parents[1] / "interfaces/hardware/marvin.py").read_text(encoding="utf-8"))
         self.assertNotIn("BRAK0", (Path(__file__).resolve().parents[1] / "interfaces/hardware/marvin.py").read_text(encoding="utf-8"))
 
+    def test_config_page_uses_exclusive_subpages(self) -> None:
+        assets = Path(__file__).resolve().parents[1] / "interfaces/pendant/assets"
+        css = (assets / "pendant.css").read_text(encoding="utf-8")
+        script = (assets / "pendant.js").read_text(encoding="utf-8")
+        self.assertIn('class="config-sub-nav active"', PENDANT_HTML)
+        self.assertEqual(PENDANT_HTML.count("config-sub active"), 1)
+        self.assertEqual(PENDANT_HTML.count('class="panel config-sub"'), 1)
+        self.assertIn(".config-stage > .config-sub { display: none", css)
+        self.assertIn(".config-stage > .config-sub.active { display: block", css)
+        self.assertIn(".frame-panel.config-sub.active", css)
+        self.assertNotIn("\n.config-sub { display: none", css)
+        self.assertIn("function showConfigSub", script)
+        self.assertIn('panel.classList.toggle("active", panel.dataset.submodule === name)', script)
+
     def test_page_switch_never_navigates_the_viser_frame(self) -> None:
         assets = Path(__file__).resolve().parents[1] / "interfaces/pendant/assets"
         source = (assets / "pendant.js").read_text(encoding="utf-8")

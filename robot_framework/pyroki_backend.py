@@ -20,6 +20,34 @@ from .model_protocol import RobotModelProtocol
 from .solver import IKSolution
 
 
+def _velocity_limit_residual(
+    vals: jaxls.VarValues,
+    robot: pk.Robot,
+    joint_var: jaxls.Var[jax.Array],
+    prev_cfg: jax.Array,
+    dt: float,
+    weight: float,
+) -> jax.Array:
+    """Per-step joint velocity limit vs. a fixed previous configuration.
+
+    Mirrors pyroki's ``limit_velocity_residual`` but takes the previous
+    configuration as a constant instead of a second variable.  The installed
+    jaxls version does not support variables that appear in costs yet are
+    absent from the optimization variable list, so a second (fixed) variable
+    would silently get a tangent slot and be optimized.
+    """
+    joint_vel = (vals[joint_var] - prev_cfg) / dt
+    residual = jnp.maximum(
+        0.0, jnp.abs(joint_vel) - robot.joints.velocity_limits
+    )
+    return (residual * weight).flatten()
+
+
+velocity_limit_constraint = jaxls.Cost.factory(kind="constraint_leq_zero")(
+    _velocity_limit_residual
+)
+
+
 @jdc.jit
 def _solve_masked(
     robot: pk.Robot,
@@ -27,10 +55,15 @@ def _solve_masked(
     target_wxyz: jax.Array,
     target_position: jax.Array,
     joint_mask: jax.Array,
-    previous_cfg: jax.Array,
+    rest_cfg: jax.Array,
+    fixed_prev_cfg: jax.Array,
     guide_cfg: jax.Array,
     guide_weight: jax.Array,
     orientation_weight: jax.Array,
+    smooth_weight: jax.Array,
+    velocity_dt: jdc.Static[float],
+    velocity_weight: jdc.Static[float],
+    manip_weight: jdc.Static[float],
 ) -> jax.Array:
     joint_var = robot.joint_var_cls(0)
     target_pose = jaxlie.SE3.from_rotation_and_translation(
@@ -46,8 +79,12 @@ def _solve_masked(
             ori_weight=orientation_weight,
             joint_mask=joint_mask,
         ),
+        # Temporal smoothness: pull the solution toward the configuration
+        # this solve started from, so consecutive IK solutions do not flip
+        # between branches.  The pose cost above still dominates whenever the
+        # TCP is away from the target.
         pk.costs.rest_cost(
-            joint_var=joint_var, rest_pose=previous_cfg, weight=0.01
+            joint_var=joint_var, rest_pose=rest_cfg, weight=smooth_weight
         ),
         pk.costs.rest_cost(
             joint_var=joint_var,
@@ -56,6 +93,29 @@ def _solve_masked(
         ),
         pk.costs.limit_constraint(robot=robot, joint_var=joint_var),
     ]
+    if velocity_weight > 0.0:
+        # Hard per-step joint velocity limit vs. the configuration before this
+        # solve: |q - q_prev| / dt <= velocity_limits (augmented Lagrangian).
+        costs.append(
+            velocity_limit_constraint(
+                robot=robot,
+                joint_var=joint_var,
+                prev_cfg=fixed_prev_cfg,
+                dt=velocity_dt,
+                weight=velocity_weight,
+            )
+        )
+    if manip_weight > 0.0:
+        # Penalize low translation manipulability at the TCP, steering the
+        # solution away from singularities that cause joint flips.
+        costs.append(
+            pk.costs.manipulability_cost(
+                robot=robot,
+                joint_var=joint_var,
+                target_link_indices=target_link_index,
+                weight=manip_weight,
+            )
+        )
     solution = (
         jaxls.LeastSquaresProblem(costs=costs, variables=[joint_var])
         .analyze()
@@ -64,7 +124,7 @@ def _solve_masked(
             linear_solver="dense_cholesky",
             trust_region=jaxls.TrustRegionConfig(lambda_initial=1.0),
             initial_vals=jaxls.VarValues.make(
-                [joint_var.with_value(previous_cfg)]
+                [joint_var.with_value(rest_cfg)]
             ),
         )
     )
@@ -128,6 +188,9 @@ class PyRokiIKSolver:
         multi_start: bool = True,
         recovery_seeds: int = 10,
         force_recovery: bool = False,
+        smooth_strength: float = 0.3,
+        velocity_limit_dt: float | None = None,
+        manipulability_weight: float = 0.0,
     ) -> IKSolution:
         seed = np.clip(np.asarray(seed), self.model.lower, self.model.upper)
         full_seed = self._full_configuration(seed, aux)
@@ -145,7 +208,10 @@ class PyRokiIKSolver:
                     target_wxyz=jnp.asarray(target_wxyz),
                     target_position=jnp.asarray(target[:3, 3]),
                     joint_mask=jnp.asarray(self.mask),
-                    previous_cfg=jnp.asarray(start),
+                    rest_cfg=jnp.asarray(start),
+                    # The velocity constraint compares against the
+                    # configuration before this solve, not the per-run start.
+                    fixed_prev_cfg=jnp.asarray(full_seed),
                     guide_cfg=jnp.asarray(full_guide),
                     guide_weight=jnp.asarray(
                         guide_strength if guide is not None else 0.0
@@ -153,6 +219,16 @@ class PyRokiIKSolver:
                     orientation_weight=jnp.asarray(
                         10.0 if lock_orientation else 0.0
                     ),
+                    smooth_weight=jnp.asarray(smooth_strength),
+                    velocity_dt=(
+                        float(velocity_limit_dt)
+                        if velocity_limit_dt is not None
+                        else 1.0
+                    ),
+                    velocity_weight=(
+                        1.0 if velocity_limit_dt is not None else 0.0
+                    ),
+                    manip_weight=float(manipulability_weight),
                 )
             ).copy()
             # This assignment enforces the hard-lock contract even if a future

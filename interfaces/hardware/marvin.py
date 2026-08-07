@@ -160,6 +160,22 @@ class MarvinRobotHardware:
                 raise ValueError("机器人下使能命令发送失败")
             self._enabled = False
 
+    def set_control_period(self, control_period_ms: int) -> None:
+        """Synchronise the SDK velocity estimator with the pendant sampler."""
+        period = int(control_period_ms)
+        if not 1 <= period <= 20:
+            raise ValueError("PD 前馈周期必须在 1 到 20 ms")
+        with self._lock:
+            self._pd_period_ms = period
+            if not self._connected or not self._enabled:
+                return
+            robot = self._require_connected()
+            robot.clear_set()
+            if not robot.set_PD_vel_est_step(self._arm, period):
+                raise ValueError("PD 前馈周期更新失败")
+            if not robot.send_cmd():
+                raise ValueError("PD 前馈周期命令发送失败")
+
     def _set_brake(self, value: int) -> None:
         robot = self._require_connected()
         if not robot.set_param("int", "BRAK1", value):

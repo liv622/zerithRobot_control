@@ -18,6 +18,8 @@ let polling = false;
 const $ = id => document.getElementById(id);
 
 function buildStaticControls() {
+  $("ikVelDt").disabled = true;
+  $("ikVelDt").title = "由示教控制器采样频率自动计算";
   $("targetFields").innerHTML = axes.map((axis, index) => `
     <div class="target-field"><label>${axis} (${index < 3 ? "m" : "deg"})</label>
     <input id="t${index}" type="number" step="${index < 3 ? ".001" : ".1"}" onchange="moveCartesianInput()"></div>
@@ -34,6 +36,12 @@ function buildStaticControls() {
   });
   document.querySelectorAll(".move-tabs button").forEach(button => {
     button.addEventListener("click", () => showMoveMode(button.dataset.mode));
+  });
+  document.querySelectorAll(".config-sub-nav").forEach(button => {
+    button.addEventListener("click", () => showConfigSub(button.dataset.sub));
+  });
+  document.querySelectorAll(".sub-nav button").forEach(button => {
+    button.addEventListener("click", () => showPageSub(activePage, button.dataset.sub));
   });
   document.addEventListener("focusin", event => {
     if (event.target.matches("input,select")) editing = true;
@@ -86,8 +94,27 @@ function showPage(name) {
   document.querySelectorAll(".page").forEach(page => page.classList.remove("active"));
   document.querySelectorAll(".nav").forEach(button => button.classList.toggle("active", button.dataset.page === name));
   $(`page-${name}`).classList.add("active");
-  if (name === "move") loadSimulationFrame();
+  // 每次进入页面都回到默认子页面：除功能栏（页面切换栏）外，每个页面
+  // 同一时刻只显示一个子页面，其余子页面与当前选中的子页面互斥不嵌套。
+  if (name === "config") showConfigSub("config-motion");
+  if (name === "home") showPageSub("home", "home-overview");
+  if (name === "program") showPageSub("program", "program-points");
+  if (name === "diagnostics") showPageSub("diagnostics", "diag-quality");
+  if (name === "move") {
+    showMoveMode("cartesian");
+    loadSimulationFrame();
+  }
+  if (name === "oscilloscope") loadOscilloscopeFrame();
   if (state) render(state);
+}
+
+function showPageSub(pageName, sub) {
+  const page = $(`page-${pageName}`);
+  if (!page) return;
+  page.querySelectorAll(".sub-nav button").forEach(button =>
+    button.classList.toggle("active", button.dataset.sub === sub));
+  page.querySelectorAll("[data-submodule]").forEach(panel =>
+    panel.classList.toggle("active", panel.dataset.submodule === sub));
 }
 
 function loadSimulationFrame() {
@@ -97,10 +124,24 @@ function loadSimulationFrame() {
   }
 }
 
+function loadOscilloscopeFrame() {
+  const frame = $("scopeFrame");
+  if (frame && frame.getAttribute("src") === "about:blank") {
+    frame.src = "/oscilloscope";
+  }
+}
+
 function showMoveMode(name) {
   document.querySelectorAll(".move-mode").forEach(panel => panel.classList.remove("active"));
   document.querySelectorAll(".move-tabs button").forEach(button => button.classList.toggle("active", button.dataset.mode === name));
   $(`move-${name}`).classList.add("active");
+}
+
+function showConfigSub(name) {
+  document.querySelectorAll(".config-sub-nav").forEach(button =>
+    button.classList.toggle("active", button.dataset.sub === name));
+  document.querySelectorAll(".config-sub").forEach(panel =>
+    panel.classList.toggle("active", panel.dataset.submodule === name));
 }
 
 async function api(path, body) {
@@ -221,6 +262,7 @@ function moveNullspaceInput() {
 }
 
 function solverPayload() {
+  const velDtInput = $("ikVelDt").value.trim();
   return {
     live: $("live").checked,
     orientation_lock: $("orient").checked,
@@ -228,6 +270,9 @@ function solverPayload() {
     recovery_count: Number($("seeds").value),
     guide_enabled: $("guideOn").checked,
     guide_strength: Number($("strength").value),
+    ik_smooth_strength: Number($("ikSmooth").value),
+    ik_velocity_limit_dt: velDtInput === "" ? null : Number(velDtInput),
+    ik_manipulability_weight: Number($("ikManip").value),
   };
 }
 
@@ -246,6 +291,7 @@ async function applyMotionSettings() {
     max_angular_speed_deg_s: Number($("maxAngular").value),
     max_joint_speed_deg_s: Number($("maxJoint").value),
     command_delay_s: Number($("commandDelay").value),
+    trajectory_frequency_hz: Number($("configFrequency").value),
   });
   await cmd("set_teach_program_settings", {
     duration: Number($("configDuration").value),
@@ -313,6 +359,72 @@ function renderCoordinateFrames(frames) {
   const option = (frame, active) => `<option value="${escapeHtml(frame.name)}" ${frame.name === active ? "selected" : ""}>${escapeHtml(frame.name)}</option>`;
   $("baseFrameSelect").innerHTML = frames.bases.map(frame => option(frame, frames.active_base)).join("");
   $("tcpFrameSelect").innerHTML = frames.tcps.map(frame => option(frame, frames.active_tcp)).join("");
+}
+
+// URDF 选择：授权文件夹 -> 扫描 -> 选择加载。
+function addUrdfRoot() {
+  const directory = $("urdfRootPath").value.trim();
+  if (!directory) {
+    setMessage("请先填写 URDF 文件夹路径", true);
+    return;
+  }
+  cmd("add_urdf_search_root", {directory}).then(result => {
+    if (result) $("urdfRootPath").value = "";
+  });
+}
+
+function removeUrdfRoot(directory) {
+  cmd("remove_urdf_search_root", {directory});
+}
+
+function selectUrdf() {
+  const path = $("urdfSelect").value;
+  if (!path) {
+    setMessage("没有可加载的 URDF", true);
+    return;
+  }
+  cmd("select_urdf", {path}).then(result => {
+    if (!result) return;
+    // The selected model has a new joint list and potentially a new Viser
+    // port. Rebuild the dynamic controls after its simulator is restarted.
+    robotControlsBuilt = false;
+    jointInputDirty = false;
+    auxInputDirty.clear();
+    const frame = $("viserFrame");
+    if (result.viser_url) {
+      frame.dataset.src = result.viser_url;
+      frame.src = result.viser_url;
+    } else if (frame.getAttribute("src") !== "about:blank") {
+      frame.src = frame.dataset.src;
+    }
+  });
+}
+
+function renderUrdfLibrary(urdf) {
+  if (!urdf) return;
+  const active = urdf.active_path ? urdf.active_path.split("/").pop() : "--";
+  $("urdfActive").textContent = urdf.status
+    ? `当前模型：${active} · ${urdf.status}`
+    : `当前模型：${active}`;
+  // 选择框在操作员正在挑选时不重建，避免轮询打断选择。
+  const select = $("urdfSelect");
+  if (document.activeElement !== select) {
+    select.innerHTML = urdf.entries.length
+      ? urdf.entries.map(entry => {
+        const label = `${entry.display_name} · ${entry.detail}`;
+        const selected = entry.path === urdf.active_path ? "selected" : "";
+        const disabled = entry.valid ? "" : "disabled";
+        return `<option value="${escapeHtml(entry.path)}" ${selected} ${disabled}>${escapeHtml(label)}</option>`;
+      }).join("")
+      : `<option value="">未找到 URDF</option>`;
+  }
+  $("urdfRootList").innerHTML = urdf.search_roots.length
+    ? urdf.search_roots.map(root => `
+      <div class="profile-item">
+        <b>${escapeHtml(root)}</b>
+        <button class="danger" onclick="removeUrdfRoot('${escapeJs(root)}')">移除</button>
+      </div>`).join("")
+    : `<p class="hint">尚未授权任何 URDF 文件夹</p>`;
 }
 
 function renderProfiles(configuration) {
@@ -392,6 +504,8 @@ function changePage(delta) {
 function selectPoint(id) {
   selectedPointId = id;
   renderTeachTable();
+  // 选中点位后自动切换到点位编辑子页面。
+  showPageSub("program", "program-editor");
 }
 
 function togglePoint(id, checked) {
@@ -454,7 +568,7 @@ function renderPointEditor() {
     $("editorHint").textContent = "--";
     $("editName").value = "";
     $("editName").disabled = true;
-    $("pointEditor").innerHTML = `<p class="hint">从左侧选择示教点</p>`;
+    $("pointEditor").innerHTML = `<p class="hint">从示教点列表选择示教点</p>`;
     return;
   }
   $("editorHint").textContent = "关节角度 + 笛卡尔位姿";
@@ -576,6 +690,9 @@ function render(nextState) {
   $("seeds").value = settings.recovery_count;
   $("guideOn").checked = settings.guide_enabled;
   $("strength").value = settings.guide_strength;
+  $("ikSmooth").value = settings.ik_smooth_strength ?? 0.3;
+  $("ikVelDt").value = settings.ik_velocity_limit_dt ?? "";
+  $("ikManip").value = settings.ik_manipulability_weight ?? 0.0;
   $("speedPercent").value = settings.speed_percent;
   $("maxLinear").value = settings.max_linear_speed_mm_s;
   $("maxAngular").value = settings.max_angular_speed_deg_s;
@@ -594,6 +711,7 @@ function render(nextState) {
     renderProfiles(state.configuration);
   }
   if (activePage === "config") renderCoordinateFrames(state.coordinate_frames);
+  if (activePage === "config") renderUrdfLibrary(state.urdf);
   if (activePage === "program") renderTeachTable();
   if (activePage === "program") renderTeachPointProfiles(state.teach_program);
   if (jointInputDirty && !state.teach_program.running) jointInputDirty = false;
@@ -613,6 +731,11 @@ async function poll() {
   } finally {
     polling = false;
   }
+}
+
+function openOscilloscope() {
+  window.open("/oscilloscope", "robot-oscilloscope",
+    "width=1150,height=780,menubar=no,toolbar=no,location=no,status=no");
 }
 
 buildStaticControls();

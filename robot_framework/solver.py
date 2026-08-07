@@ -56,6 +56,11 @@ class IKSolver:
         multi_start: bool = True,
         recovery_seeds: int = 10,
         force_recovery: bool = False,
+        # Accepted for interface parity with the PyRoki backend; this SciPy
+        # fallback has no temporal smoothness / velocity-limit machinery.
+        smooth_strength: float = 0.3,
+        velocity_limit_dt: float | None = None,
+        manipulability_weight: float = 0.0,
     ) -> IKSolution:
         seed = np.clip(np.asarray(seed, dtype=float), self.model.lower, self.model.upper)
         guide_value = seed if guide is None else np.asarray(guide, dtype=float)

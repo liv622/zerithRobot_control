@@ -28,14 +28,22 @@ PENDANT_HTML = """<!doctype html>
       <button class="nav" data-page="program"><span>▶</span>示教程序</button>
       <button class="nav" data-page="config"><span>⚙</span>配置</button>
       <button class="nav" data-page="diagnostics"><span>◉</span>诊断</button>
+      <button class="nav" data-page="oscilloscope"><span>◈</span>示波器</button>
     </nav>
 
     <div class="content-stage">
       <main class="pages">
       <section id="page-home" class="page active">
-        <div class="page-head"><div><h1>首页</h1><p>机器人状态和常用操作</p></div><span id="homeStatus" class="state-tag">待机</span></div>
+        <div class="page-head"><div><h1>首页</h1><p>机器人状态和常用操作</p></div>
+          <div class="segmented sub-nav">
+            <button class="active" data-sub="home-overview">概览</button>
+            <button data-sub="home-quick">快速操作</button>
+            <button data-sub="home-runtime">运行参数</button>
+            <button data-sub="home-hardware">硬件控制</button>
+          </div>
+        <span id="homeStatus" class="state-tag">待机</span></div>
         <div class="dashboard">
-          <article class="panel hero" data-submodule="home-overview">
+          <article class="panel hero home-sub active" data-submodule="home-overview">
             <div class="panel-title">机器人概览 <span>当前 TCP / 关节状态</span></div>
             <div class="pose-overview">
               <div><small>X</small><b id="hx">--</b><em>m</em></div>
@@ -47,7 +55,7 @@ PENDANT_HTML = """<!doctype html>
             </div>
             <div id="homeJoints" class="joint-bars"></div>
           </article>
-          <article class="panel" data-submodule="home-quick">
+          <article class="panel home-sub" data-submodule="home-quick">
             <div class="panel-title">快速操作 <span>常用任务</span></div>
             <div class="quick-grid">
               <button onclick="showPage('move')"><b>运动示教</b><small>笛卡尔 / 关节 / 附加轴</small></button>
@@ -56,7 +64,7 @@ PENDANT_HTML = """<!doctype html>
               <button class="warn" onclick="cmd('reset')"><b>机器人复位</b><small>恢复初始关节构型</small></button>
             </div>
           </article>
-          <article class="panel" data-submodule="home-runtime">
+          <article class="panel home-sub" data-submodule="home-runtime">
             <div class="panel-title">运行参数 <span id="activeProfileHome">未调用配置</span></div>
             <div class="metric-grid">
               <div class="metric"><b id="homeSpeed">--</b><span>速度百分比</span></div>
@@ -65,7 +73,7 @@ PENDANT_HTML = """<!doctype html>
               <div class="metric"><b id="homeDelay">--</b><span>动作间延时</span></div>
             </div>
           </article>
-          <article class="panel hardware-panel" data-submodule="home-hardware">
+          <article class="panel hardware-panel home-sub" data-submodule="home-hardware">
             <div class="panel-title">E1Pro初始化控制 <span id="hardwareState">右臂未连接</span></div>
             <div class="form-row"><label>控制柜 IP</label><input id="hardwareIp" value="192.168.1.190" inputmode="decimal"></div>
             <div class="action-row two"><button class="primary" onclick="connectHardware()">连接右臂</button><button onclick="cmd('disconnect_hardware')">断开</button></div>
@@ -115,7 +123,7 @@ PENDANT_HTML = """<!doctype html>
           <section class="inline-settings arm-shape-settings" data-submodule="move-settings">
             <div class="inline-settings-title">同 TCP 臂型 <span>冗余机器人</span></div>
             <p class="hint">保持当前 TCP 位置和姿态不变，搜索另一组关节解。</p>
-            <div class="inline-settings-grid compact-actions"><button class="shape-button" onclick="cmd('switch_arm_shape',{direction:-1})">‹ 上一个臂型</button><button class="shape-button primary" onclick="cmd('switch_arm_shape',{direction:1})">下一个臂型 ›</button><button onclick="cmd('guide_current')">当前臂型设为参考</button><label class="switch-row">启用臂型引导<input id="guideOn" type="checkbox"><i></i></label><div class="form-row"><label>引导强度</label><input id="strength" type="number" min="0" max=".5" step=".01"></div><div class="step-box"><span>步进值 / 连续速度档</span><b><input id="jointStep" type="number" value="5" min=".1" max="30" step=".1"> deg</b><label class="step-mode-toggle">步进点动<input id="jointStepMode" type="checkbox"><i></i></label></div><button onclick="applySolverSettings()">应用臂型参数</button></div>
+            <div class="inline-settings-grid compact-actions"><button class="shape-button" onclick="cmd('switch_arm_shape',{direction:-1})">‹ 上一个臂型</button><button class="shape-button primary" onclick="cmd('switch_arm_shape',{direction:1})">下一个臂型 ›</button><button onclick="cmd('guide_current')">当前臂型设为参考</button><label class="switch-row">启用臂型引导<input id="guideOn" type="checkbox"><i></i></label><div class="form-row"><label>引导强度</label><input id="strength" type="number" min="0" max=".5" step=".01"></div><div class="form-row"><label>平滑强度</label><input id="ikSmooth" type="number" min="0" max="5" step=".05"></div><div class="form-row"><label>速度限制周期</label><input id="ikVelDt" type="number" min="0.001" max="1" step=".005" placeholder="0.02 s 或空"></div><div class="form-row"><label>奇异规避权重</label><input id="ikManip" type="number" min="0" max="1" step=".005"></div><div class="step-box"><span>步进值 / 连续速度档</span><b><input id="jointStep" type="number" value="5" min=".1" max="30" step=".1"> deg</b><label class="step-mode-toggle">步进点动<input id="jointStepMode" type="checkbox"><i></i></label></div><button onclick="applySolverSettings()">应用臂型参数</button></div>
           </section></article>
         </div>
         <div id="move-nullspace" class="move-mode">
@@ -148,9 +156,15 @@ PENDANT_HTML = """<!doctype html>
       </section>
 
       <section id="page-program" class="page">
-        <div class="page-head"><div><h1>示教程序</h1><p>MOVL 笛卡尔插补 / MOVJ 关节空间插补</p></div><span id="programStatus" class="state-tag">待机</span></div>
+        <div class="page-head"><div><h1>示教程序</h1><p>MOVL 笛卡尔插补 / MOVJ 关节空间插补</p></div>
+          <div class="segmented sub-nav">
+            <button class="active" data-sub="program-points">示教点列表</button>
+            <button data-sub="program-editor">点位编辑</button>
+            <button data-sub="program-runtime">点位配置与运行</button>
+          </div>
+        <span id="programStatus" class="state-tag">待机</span></div>
         <div class="program-layout">
-          <article class="panel point-list-panel" data-submodule="program-points">
+          <article class="panel point-list-panel program-sub active" data-submodule="program-points">
             <div class="panel-title">示教点列表 <span>勾选后按点表顺序执行</span></div>
             <div class="save-line">
               <input id="newPointName" maxlength="24" placeholder="示教点名称（可选）">
@@ -160,19 +174,20 @@ PENDANT_HTML = """<!doctype html>
             <div id="teachTable" class="teach-table"></div>
             <div class="pager"><button onclick="changePage(-1)">上一页</button><span id="pageInfo">0 / 0</span><button onclick="changePage(1)">下一页</button></div>
           </article>
-          <aside class="panel program-side" data-submodule="program-editor">
+          <aside class="panel program-side program-sub" data-submodule="program-editor">
             <div class="panel-title">点位编辑 <span id="editorHint">--</span></div>
             <input id="editName" placeholder="选择点位" disabled>
             <div id="pointEditor" class="editor-grid"></div>
             <div class="action-row two"><button onclick="updatePoint()">保存修改</button><button class="danger" onclick="deletePoint()">删除</button></div>
-            <div class="divider"></div>
+          </aside>
+          <aside class="panel program-side program-sub" data-submodule="program-runtime">
             <div class="panel-title">示教点位配置 <span id="teachProfileState">未调用</span></div>
             <input id="teachProfileName" maxlength="32" placeholder="输入配置名称，例如 装配工位A">
             <div class="action-row two"><button class="primary" onclick="saveTeachPointProfile()">保存点位配置</button><button onclick="loadTeachPointProfile()">调用点位配置</button></div>
             <select id="teachProfileSelect" onchange="selectTeachPointProfile()"></select>
             <div class="divider"></div>
             <div class="form-row"><label>基础单点时长</label><input id="duration" type="number" min=".2" step=".1"></div>
-            <div class="form-row"><label>插补频率</label><input id="frequency" type="number" min="50" max="1000" step="1"></div>
+            <div class="form-row"><label>示教控制器采样频率</label><input id="frequency" type="number" min="50" max="1000" step="1" onchange="document.getElementById('configFrequency').value=this.value"></div>
             <label class="switch-row">循环执行<input id="loopProgram" type="checkbox"><i></i></label>
             <div class="action-row two"><button class="run" onclick="runPoints()">▶ 运行勾选点</button><button class="danger" onclick="cmd('stop_teach_points')">■ 停止</button></div>
           </aside>
@@ -182,64 +197,90 @@ PENDANT_HTML = """<!doctype html>
       <section id="page-config" class="page">
         <div class="page-head"><div><h1>配置</h1><p>运动限制、执行节拍与配置文件</p></div><span id="activeProfile" class="state-tag">未调用配置</span></div>
         <div class="config-layout">
-          <article class="panel" data-submodule="config-motion">
-            <div class="panel-title">全局速度 <span>实际速度 = 上限 × 百分比</span></div>
-            <div class="big-speed"><button onclick="speedPreset(10)">10%</button><button onclick="speedPreset(30)">30%</button><button onclick="speedPreset(50)">50%</button><button onclick="speedPreset(100)">100%</button></div>
-            <div class="config-grid">
-              <div class="config-field"><label>速度百分比</label><div><input id="speedPercent" type="number" min="1" max="100" step="1"><em>%</em></div></div>
-              <div class="config-field"><label>最大线速度</label><div><input id="maxLinear" type="number" min="1" max="2000"><em>mm/s</em></div></div>
-              <div class="config-field"><label>最大角速度</label><div><input id="maxAngular" type="number" min="1" max="360"><em>deg/s</em></div></div>
-              <div class="config-field"><label>最大关节速度</label><div><input id="maxJoint" type="number" min="1" max="360"><em>deg/s</em></div></div>
-              <div class="config-field"><label>动作完成后延时</label><div><input id="commandDelay" type="number" min="0" max="60" step=".1"><em>s</em></div></div>
-            </div>
-            <button class="primary wide" onclick="applyMotionSettings()">应用运动配置</button>
-          </article>
-          <article class="panel" data-submodule="config-trajectory">
-            <div class="panel-title">IK 与轨迹 <span>高级参数</span></div>
-            <div class="config-grid compact-config">
-              <div class="config-field"><label>恢复搜索种子数</label><div><input id="seeds" type="number" min="4" max="24"><em>个</em></div></div>
-              <div class="config-field"><label>默认单点时长</label><div><input id="configDuration" type="number" min=".2" step=".1"><em>s</em></div></div>
-              <div class="config-field"><label>轨迹频率</label><div><input id="configFrequency" type="number" min="50" max="1000"><em>Hz</em></div></div>
-            </div>
-            <p class="hint">速度百分比同时作用于连续点动、MOVL 和 MOVJ；最大速度作为轨迹硬上限。</p>
-          </article>
-          <aside class="panel profile-panel" data-submodule="config-profiles">
-            <div class="panel-title">配置文件 <span>保存 / 调用</span></div>
-            <input id="profileName" maxlength="32" placeholder="新配置名称">
-            <button class="primary" onclick="saveProfile()">保存当前配置</button>
-            <div id="profileList" class="profile-list"></div>
-            <p class="hint">配置包含速度、延时、求解参数、轨迹参数和当前臂型参考。</p>
-          </aside>
-          <aside class="panel frame-panel" data-submodule="config-frames">
-            <div class="panel-title">坐标系与 TCP <span>位姿显示 / 运动参考</span></div>
-            <div class="form-row"><label>用户基坐标系</label><select id="baseFrameSelect"></select></div>
-            <div class="form-row"><label>TCP 坐标系</label><select id="tcpFrameSelect"></select></div>
-            <button class="primary wide" onclick="selectCoordinateFrames()">应用当前坐标系</button>
-            <div class="divider"></div>
-            <b>创建用户基坐标系</b>
-            <input id="baseFrameName" maxlength="32" placeholder="名称，例如 工装A">
-            <input id="baseFrameValues" placeholder="X,Y,Z,Rx,Ry,Rz（m, m, m, deg）">
-            <button onclick="createCoordinateFrame('base')">保存用户基坐标系</button>
-            <b>创建 TCP 坐标系</b>
-            <input id="tcpFrameName" maxlength="32" placeholder="名称，例如 吸盘TCP">
-            <input id="tcpFrameValues" placeholder="X,Y,Z,Rx,Ry,Rz（相对法兰）">
-            <button onclick="createCoordinateFrame('tcp')">保存 TCP 坐标系</button>
-            <p class="hint">用户基坐标系相对 base_link；TCP 坐标系相对法兰。创建后可立即选择。</p>
-          </aside>
+          <nav class="config-nav" aria-label="配置子页面">
+            <button class="config-sub-nav active" data-sub="config-motion"><span>⚡</span>全局速度</button>
+            <button class="config-sub-nav" data-sub="config-trajectory"><span>◈</span>IK 与轨迹</button>
+            <button class="config-sub-nav" data-sub="config-profiles"><span>▦</span>配置文件</button>
+            <button class="config-sub-nav" data-sub="config-frames"><span>✚</span>坐标系与 TCP</button>
+            <button class="config-sub-nav" data-sub="config-urdf"><span>▤</span>机器人模型 URDF</button>
+          </nav>
+          <div class="config-stage">
+            <article class="panel config-sub active" data-submodule="config-motion">
+              <div class="panel-title">全局速度 <span>实际速度 = 上限 × 百分比</span></div>
+              <div class="big-speed"><button onclick="speedPreset(10)">10%</button><button onclick="speedPreset(30)">30%</button><button onclick="speedPreset(50)">50%</button><button onclick="speedPreset(100)">100%</button></div>
+              <div class="config-grid">
+                <div class="config-field"><label>速度百分比</label><div><input id="speedPercent" type="number" min="1" max="100" step="1"><em>%</em></div></div>
+                <div class="config-field"><label>最大线速度</label><div><input id="maxLinear" type="number" min="1" max="2000"><em>mm/s</em></div></div>
+                <div class="config-field"><label>最大角速度</label><div><input id="maxAngular" type="number" min="1" max="360"><em>deg/s</em></div></div>
+                <div class="config-field"><label>最大关节速度</label><div><input id="maxJoint" type="number" min="1" max="360"><em>deg/s</em></div></div>
+                <div class="config-field"><label>动作完成后延时</label><div><input id="commandDelay" type="number" min="0" max="60" step=".1"><em>s</em></div></div>
+              </div>
+              <button class="primary wide" onclick="applyMotionSettings()">应用运动配置</button>
+            </article>
+            <article class="panel config-sub" data-submodule="config-trajectory">
+              <div class="panel-title">IK 与轨迹 <span>高级参数</span></div>
+              <div class="config-grid compact-config">
+                <div class="config-field"><label>恢复搜索种子数</label><div><input id="seeds" type="number" min="4" max="24"><em>个</em></div></div>
+                <div class="config-field"><label>默认单点时长</label><div><input id="configDuration" type="number" min=".2" step=".1"><em>s</em></div></div>
+              <div class="config-field"><label>示教控制器采样频率</label><div><input id="configFrequency" type="number" min="50" max="1000" step="1" onchange="document.getElementById('frequency').value=this.value"><em>Hz</em></div></div>
+              </div>
+              <p class="hint">该频率统一用于 MOVJ、MOVL、关节点动、笛卡尔点动和零空间插补；Viser 独立低频刷新，不占用控制周期。</p>
+            </article>
+            <aside class="panel profile-panel config-sub" data-submodule="config-profiles">
+              <div class="panel-title">配置文件 <span>保存 / 调用</span></div>
+              <input id="profileName" maxlength="32" placeholder="新配置名称">
+              <button class="primary" onclick="saveProfile()">保存当前配置</button>
+              <div id="profileList" class="profile-list"></div>
+              <p class="hint">配置包含速度、延时、求解参数、轨迹参数和当前臂型参考。</p>
+            </aside>
+            <aside class="panel frame-panel config-sub" data-submodule="config-frames">
+              <div class="panel-title">坐标系与 TCP <span>位姿显示 / 运动参考</span></div>
+              <div class="form-row"><label>用户基坐标系</label><select id="baseFrameSelect"></select></div>
+              <div class="form-row"><label>TCP 坐标系</label><select id="tcpFrameSelect"></select></div>
+              <button class="primary wide" onclick="selectCoordinateFrames()">应用当前坐标系</button>
+              <div class="divider"></div>
+              <b>创建用户基坐标系</b>
+              <input id="baseFrameName" maxlength="32" placeholder="名称，例如 工装A">
+              <input id="baseFrameValues" placeholder="X,Y,Z,Rx,Ry,Rz（m, m, m, deg）">
+              <button onclick="createCoordinateFrame('base')">保存用户基坐标系</button>
+              <b>创建 TCP 坐标系</b>
+              <input id="tcpFrameName" maxlength="32" placeholder="名称，例如 吸盘TCP">
+              <input id="tcpFrameValues" placeholder="X,Y,Z,Rx,Ry,Rz（相对法兰）">
+              <button onclick="createCoordinateFrame('tcp')">保存 TCP 坐标系</button>
+              <p class="hint">用户基坐标系相对 base_link；TCP 坐标系相对法兰。创建后可立即选择。</p>
+            </aside>
+            <aside class="panel urdf-panel config-sub" data-submodule="config-urdf">
+              <div class="panel-title">机器人模型 URDF <span>任意文件夹</span></div>
+              <div id="urdfActive" class="state-line">当前模型：--</div>
+              <input id="urdfRootPath" placeholder="URDF 所在文件夹绝对路径">
+              <button onclick="addUrdfRoot()">授权该文件夹</button>
+              <div class="form-row"><label>可用模型</label><select id="urdfSelect"></select></div>
+              <button class="primary wide" onclick="selectUrdf()">加载所选 URDF</button>
+              <button onclick="cmd('refresh_urdf_library')">重新扫描</button>
+              <div id="urdfRootList" class="profile-list"></div>
+              <p class="hint">只允许从已授权文件夹加载 .urdf；切换在仿真重启后生效，运动期间不可切换。</p>
+            </aside>
+          </div>
         </div>
       </section>
 
       <section id="page-diagnostics" class="page">
-        <div class="page-head"><div><h1>诊断</h1><p>IK 误差、通信及机器人状态</p></div></div>
+        <div class="page-head"><div><h1>诊断</h1><p>IK 误差、通信及机器人状态</p></div>
+          <div class="segmented sub-nav">
+            <button class="active" data-sub="diag-quality">IK 求解质量</button>
+            <button data-sub="diag-log">运行信息</button>
+            <button data-sub="diag-actions">系统操作</button>
+          </div>
+        </div>
         <div class="diagnostic-layout">
-          <article class="panel"><div class="panel-title">IK 求解质量 <span>实时</span></div><div class="metric-grid diagnostic">
+          <article class="panel diag-sub active" data-submodule="diag-quality"><div class="panel-title">IK 求解质量 <span>实时</span></div><div class="metric-grid diagnostic">
             <div class="metric"><b id="poserr">--</b><span>位置误差 mm</span></div>
             <div class="metric"><b id="orierr">--</b><span>姿态误差 deg</span></div>
             <div class="metric"><b id="attempts">--</b><span>求解尝试</span></div>
             <div class="metric"><b id="dragState">锁定</b><span>场景拖拽</span></div>
           </div></article>
-          <article class="panel log-panel"><div class="panel-title">运行信息 <span>最近消息</span></div><div id="diagnosticMessage">等待通信……</div></article>
-          <article class="panel"><div class="panel-title">系统操作 <span>仿真</span></div><div class="quick-grid diagnostic-actions">
+          <article class="panel log-panel diag-sub" data-submodule="diag-log"><div class="panel-title">运行信息 <span>最近消息</span></div><div id="diagnosticMessage">等待通信……</div></article>
+          <article class="panel diag-sub" data-submodule="diag-actions"><div class="panel-title">系统操作 <span>仿真</span></div><div class="quick-grid diagnostic-actions">
             <button onclick="cmd('solve')"><b>执行 IK</b><small>当前目标单次求解</small></button>
             <button onclick="cmd('recover')"><b>恢复求解</b><small>强制多起点搜索</small></button>
             <button onclick="cmd('toggle_drag')"><b>场景拖拽</b><small>切换 TCP 拖拽状态</small></button>
@@ -247,6 +288,15 @@ PENDANT_HTML = """<!doctype html>
           </div></article>
         </div>
       </section>
+
+      <section id="page-oscilloscope" class="page">
+        <div class="page-head"><div><h1>示波器</h1><p>关节位置 / 速度 / 加速度实时波形</p></div>
+        <button class="detach-btn" onclick="openOscilloscope()" title="在新窗口打开示波器">◈ 脱离示教器</button></div>
+        <div class="oscilloscope-stage">
+          <iframe id="scopeFrame" src="about:blank" title="示波器实时波形"></iframe>
+        </div>
+      </section>
+
       </main>
       <aside id="viserDock" class="viser-dock" aria-label="机械臂实时仿真">
         <div class="viser-head"><b>机械臂实时仿真</b><span>Viser · 实时</span></div>

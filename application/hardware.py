@@ -19,6 +19,9 @@ class NullRobotHardware:
     def enable(self, control_period_ms: int = 5) -> None:
         raise ValueError("当前进程未启用 Marvin 真机接口")
 
+    def set_control_period(self, control_period_ms: int) -> None:
+        return
+
     def disable(self) -> None:
         return
 

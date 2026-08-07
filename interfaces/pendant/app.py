@@ -3,30 +3,48 @@
 from __future__ import annotations
 
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 
 from communication import PendantGatewayServer
 from .template import PENDANT_HTML
 
+_OSCILLOSCOPE_ASSETS = Path(__file__).resolve().parents[1] / "oscilloscope" / "assets"
+
 
 def _read_asset(
     path: str,
     viser_url: str = "http://127.0.0.1:8080",
+    simulator_url: str = "http://127.0.0.1:8765",
 ) -> tuple[bytes, str] | None:
     if path in {"/", "/index.html"}:
         html = PENDANT_HTML.replace("__VISER_URL__", viser_url.rstrip("/"))
         return html.encode("utf-8"), "text/html; charset=utf-8"
-    assets = {
+    if path == "/oscilloscope":
+        stream_url = simulator_url.rstrip("/") + "/api/oscilloscope/stream"
+        html = (
+            (_OSCILLOSCOPE_ASSETS / "oscilloscope.html")
+            .read_text(encoding="utf-8")
+            .replace("__STREAM_URL__", stream_url)
+        )
+        return html.encode("utf-8"), "text/html; charset=utf-8"
+    # Pendant assets
+    pendant_dir = Path(__file__).parent / "assets"
+    pendant_assets = {
         "/assets/pendant.css": ("pendant.css", "text/css; charset=utf-8"),
-        "/assets/pendant.js": (
-            "pendant.js",
-            "text/javascript; charset=utf-8",
-        ),
+        "/assets/pendant.js": ("pendant.js", "text/javascript; charset=utf-8"),
     }
-    if path in assets:
-        name, content_type = assets[path]
-        body = (Path(__file__).parent / "assets" / name).read_bytes()
-        return body, content_type
+    if path in pendant_assets:
+        name, content_type = pendant_assets[path]
+        return (pendant_dir / name).read_bytes(), content_type
+    # Oscilloscope assets (served from the dedicated module)
+    scope_assets = {
+        "/assets/oscilloscope.css": ("oscilloscope.css", "text/css; charset=utf-8"),
+        "/assets/oscilloscope.js": ("oscilloscope.js", "text/javascript; charset=utf-8"),
+    }
+    if path in scope_assets:
+        name, content_type = scope_assets[path]
+        return (_OSCILLOSCOPE_ASSETS / name).read_bytes(), content_type
     return None
 
 
@@ -36,12 +54,14 @@ def run_pendant(
     simulator_url: str,
     viser_url: str,
     open_browser: bool,
+    local_api: Callable[[str, str, dict], dict] | None = None,
 ) -> None:
     server = PendantGatewayServer(
         host,
         port,
         simulator_url,
-        lambda path: _read_asset(path, viser_url),
+        lambda path: _read_asset(path, viser_url, simulator_url),
+        local_api,
     )
     actual_host, actual_port = server.address
     browser_host = "127.0.0.1" if actual_host in {"0.0.0.0", "::"} else actual_host

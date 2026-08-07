@@ -118,10 +118,22 @@ class CommandDispatcher:
             if action == "settings":
                 seeds = int(command["recovery_count"])
                 strength = float(command["guide_strength"])
+                smooth = float(command.get("ik_smooth_strength", 0.3))
+                # IK uses the teach-controller sampling period.  Keeping a
+                # second independently editable period would make Cartesian
+                # and null-space interpolation disagree with MOVJ.
+                velocity_dt = 1.0 / app.settings.trajectory_frequency_hz
+                manip = float(command.get("ik_manipulability_weight", 0.0))
                 if not 4 <= seeds <= 24:
                     raise ValueError("恢复种子数必须在 4 到 24 之间")
                 if not 0.0 <= strength <= 0.5:
                     raise ValueError("引导强度必须在 0 到 0.5 之间")
+                if not 0.0 <= smooth <= 5.0:
+                    raise ValueError("平滑强度必须在 0 到 5 之间")
+                if not 0.001 <= float(velocity_dt) <= 0.02:
+                    raise ValueError("IK 周期必须与 50 到 1000 Hz 采样频率一致")
+                if not 0.0 <= manip <= 1.0:
+                    raise ValueError("奇异规避权重必须在 0 到 1 之间")
                 app.update_settings(
                     live_solve=bool(command["live"]),
                     orientation_lock=bool(command["orientation_lock"]),
@@ -129,6 +141,9 @@ class CommandDispatcher:
                     recovery_count=seeds,
                     guide_enabled=bool(command["guide_enabled"]),
                     guide_strength=strength,
+                    ik_smooth_strength=smooth,
+                    ik_velocity_limit_dt=float(velocity_dt),
+                    ik_manipulability_weight=manip,
                 )
                 return {"message": "求解参数已应用"}
             if action == "jog_joint":
@@ -261,4 +276,22 @@ class CommandDispatcher:
             if action == "stop_teach_points":
                 app.teach_program.stop()
                 return {"message": "已发送示教程序停止命令"}
+            # 以下为 URDF 选择相关命令：目录授权、扫描、选择。
+            if action == "add_urdf_search_root":
+                resolved = app.urdf_library.add_search_root(
+                    str(command["directory"])
+                )
+                return {"message": f"已添加 URDF 目录：{resolved}"}
+            if action == "remove_urdf_search_root":
+                app.urdf_library.remove_search_root(str(command["directory"]))
+                return {"message": "已移除 URDF 目录"}
+            if action == "refresh_urdf_library":
+                entries = app.urdf_library.refresh()
+                return {"message": f"已扫描到 {len(entries)} 个 URDF 文件"}
+            if action == "select_urdf":
+                resolved = app.urdf_library.select(str(command["path"]))
+                return {
+                    "message": app.urdf_library.status,
+                    "path": str(resolved),
+                }
             raise ValueError(f"未知命令：{action}")

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>示波器 · Robot</title>
+  <link rel="stylesheet" href="/assets/oscilloscope.css">
+</head>
+<body data-stream-url="__STREAM_URL__">
+
+<header class="topbar">
+  <b class="brand">◈ 示波器</b>
+  <span class="status-line">
+    <i id="dot" class="dot dead"></i>
+    <span id="statusText">离线</span>
+  </span>
+  <button id="pauseBtn" class="pause-btn" onclick="togglePause()" disabled>⏸ 暂停</button>
+  <button class="export-btn" onclick="exportCSV()" disabled id="exportBtn">⬇ 导出 CSV</button>
+  <label class="import-btn" title="导入 CSV 数据绘制曲线">
+    ⬆ 导入 CSV
+    <input type="file" id="importFile" accept=".csv" onchange="importCSV(event)" hidden>
+  </label>
+  <span id="rateDisplay" class="rate"></span>
+</header>
+
+<div id="controls" class="controls"><!-- built after SSE init --></div>
+
+<section id="charts" class="charts">
+  <div class="placeholder">等待数据连接……</div>
+</section>
+
+<footer class="footer">
+  <span>Δt <b id="footerDt">--</b></span>
+  <span>·</span>
+  <span id="fpsOut" class="fps">-- fps</span>
+  <span>·</span>
+  <span id="pauseBadge" class="pause-badge" style="display:none">⏸ 已暂停</span>
+  <span id="debugOut" class="debug-line"></span>
+</footer>
+
+<script src="/assets/oscilloscope.js"></script>
+</body>
+</html>

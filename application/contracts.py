@@ -30,6 +30,14 @@ def _noop_motion(_: np.ndarray) -> None:
     return
 
 
+def _noop_motion_state(
+    _: np.ndarray,
+    __: np.ndarray,
+    ___: np.ndarray,
+) -> None:
+    return
+
+
 @dataclass
 class ApplicationEvents:
     scene_changed: Callable[[], None] = _noop
@@ -44,6 +52,12 @@ class ApplicationEvents:
     # is deliberately separate from scene_changed: a scene redraw or an IK
     # preview must never cause a physical robot to move.
     motion_sample: Callable[[np.ndarray], None] = _noop_motion
+    # Exact planner state for diagnostics/recording.  Consumers must use this
+    # for MOVJ velocity instead of differentiating an independently sampled
+    # staircase of positions.
+    motion_state: Callable[
+        [np.ndarray, np.ndarray, np.ndarray], None
+    ] = _noop_motion_state
 
 
 @dataclass
@@ -54,6 +68,12 @@ class ApplicationSettings:
     recovery_count: int = 10
     guide_enabled: bool = False
     guide_strength: float = 0.05
+    # IK smoothness: temporal regularization strength toward the previous
+    # configuration, per-step velocity-limit time base (None disables the
+    # hard velocity constraint), and singularity-avoidance weight (0 disables).
+    ik_smooth_strength: float = 0.3
+    ik_velocity_limit_dt: float | None = 0.02
+    ik_manipulability_weight: float = 0.0
     point_duration_s: float = 5.0
     # PD feedforward accepts 1–20 ms trajectory updates; 200 Hz is its
     # documented 5 ms recommendation and is also used by the simulator.

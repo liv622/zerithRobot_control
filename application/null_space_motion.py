@@ -118,7 +118,8 @@ class NullSpaceMotionService:
             )
 
         self.controller.guide = guide
-        self.controller.arm = solution.arm.copy()
+        with self.controller._arm_lock:
+            self.controller.arm = solution.arm.copy()
         self.controller.target = self._locked_target.copy()
         self.controller.solution = solution
         self.controller.save()

@@ -17,6 +17,7 @@ class PendantGatewayServer:
         port: int,
         simulator_url: str,
         asset_reader: Callable[[str], tuple[bytes, str] | None],
+        local_api: Callable[[str, str, dict], dict] | None = None,
     ) -> None:
         upstream = simulator_url.rstrip("/")
 
@@ -45,9 +46,35 @@ class PendantGatewayServer:
                     self._send(HTTPStatus.NOT_FOUND, b"not found", "text/plain")
                     return
                 size = int(self.headers.get("Content-Length", "0"))
-                self._proxy("POST", self.rfile.read(size))
+                body = self.rfile.read(size)
+                try:
+                    command = json.loads(body)
+                except json.JSONDecodeError:
+                    command = {}
+                if (
+                    command.get("action") == "select_urdf"
+                    and local_api is not None
+                ):
+                    try:
+                        local_api("POST", "/api/can-reload-urdf", {})
+                    except (OSError, RuntimeError, ValueError) as exc:
+                        self._send(
+                            HTTPStatus.BAD_REQUEST,
+                            json.dumps(
+                                {"ok": False, "error": str(exc)},
+                                ensure_ascii=False,
+                            ).encode("utf-8"),
+                            "application/json; charset=utf-8",
+                        )
+                        return
+                self._proxy("POST", body, command)
 
-            def _proxy(self, method: str, body: bytes) -> None:
+            def _proxy(
+                self,
+                method: str,
+                body: bytes,
+                command: dict | None = None,
+            ) -> None:
                 try:
                     request = urllib.request.Request(
                         upstream + self.path,
@@ -57,6 +84,23 @@ class PendantGatewayServer:
                     )
                     with urllib.request.urlopen(request, timeout=3.0) as response:
                         data = response.read()
+                        if (
+                            method == "POST"
+                            and command is not None
+                            and command.get("action") == "select_urdf"
+                            and local_api is not None
+                        ):
+                            result = json.loads(data)
+                            if result.get("ok") and result.get("path"):
+                                reloaded = local_api(
+                                    "POST",
+                                    "/api/reload-urdf",
+                                    {"path": result["path"]},
+                                )
+                                result.update(reloaded)
+                                data = json.dumps(
+                                    result, ensure_ascii=False
+                                ).encode("utf-8")
                         self._send(
                             response.status,
                             data,
@@ -81,6 +125,15 @@ class PendantGatewayServer:
                     self._send(
                         HTTPStatus.BAD_GATEWAY,
                         data,
+                        "application/json; charset=utf-8",
+                    )
+                except (OSError, RuntimeError, ValueError) as exc:
+                    self._send(
+                        HTTPStatus.BAD_REQUEST,
+                        json.dumps(
+                            {"ok": False, "error": str(exc)},
+                            ensure_ascii=False,
+                        ).encode("utf-8"),
                         "application/json; charset=utf-8",
                     )
 

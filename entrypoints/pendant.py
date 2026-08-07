@@ -3,15 +3,38 @@
 from __future__ import annotations
 
 import argparse
+import atexit
+import ctypes
+import os
+import signal
 import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from interfaces.pendant.app import run_pendant
+
+# Linux-specific: ask the kernel to send SIGTERM to the child when the
+# parent dies (including SIGKILL).  The child inherits this setting
+# across fork + exec.
+#
+# We use ctypes because the prctl wrapper is not in the stdlib.
+try:
+    _LIBC = ctypes.CDLL("libc.so.6", use_errno=True)
+    _PR_SET_PDEATHSIG = ctypes.c_int(1)
+    _LIBC.prctl.argtypes = (ctypes.c_int, ctypes.c_ulong)
+    _LIBC.prctl.restype = ctypes.c_int
+
+    def _preexec_set_pdeathsig() -> None:
+        """Set ``PR_SET_PDEATHSIG = SIGTERM`` — must run in the child after fork."""
+        _LIBC.prctl(_PR_SET_PDEATHSIG, ctypes.c_ulong(signal.SIGTERM))
+
+except OSError:
+    _preexec_set_pdeathsig = None  # type: ignore[assignment]
 
 
 def _host_port(url: str, default_port: int) -> tuple[str, int]:
@@ -58,7 +81,8 @@ def _start_simulator(
             "--control-port",
             str(control_port),
         ]
-        + (["--urdf", urdf] if urdf else [])
+        + (["--urdf", urdf] if urdf else []),
+        preexec_fn=_preexec_set_pdeathsig,
     )
     state_url = simulator_url.rstrip("/") + "/api/state"
     deadline = time.monotonic() + 15.0
@@ -96,6 +120,36 @@ def _stop_simulator(process: subprocess.Popen | None) -> None:
         process.wait(timeout=3.0)
 
 
+def _stop_simulator_tree(process: subprocess.Popen | None) -> None:
+    """Kill the process and its entire process group.
+
+    This ensures the simulator (which may itself spawn threads and
+    subprocesses for viser) is fully cleaned up on every exit path.
+    """
+    if process is None:
+        return
+    if process.poll() is not None:
+        return
+    pid = process.pid
+    if pid is None:
+        _stop_simulator(process)
+        return
+    try:
+        # Send SIGTERM to the whole process group first.
+        os.killpg(pid, signal.SIGTERM)
+        try:
+            process.wait(timeout=2.0)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        # Escalate to SIGKILL for stragglers.
+        os.killpg(pid, signal.SIGKILL)
+        process.wait(timeout=2.0)
+    except (ProcessLookupError, OSError):
+        # Already dead or not in a group — fall back to single-process kill.
+        _stop_simulator(process)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="0.0.0.0", help="示教器页面监听地址")
@@ -126,11 +180,63 @@ def main() -> int:
     )
     parser.add_argument("--open", action="store_true", help="启动后打开浏览器")
     args = parser.parse_args()
-    simulator = None
+    project_root = Path(__file__).resolve().parents[1]
+    simulator_ref: dict[str, subprocess.Popen | None] = {"process": None}
     resolved_viser_url = args.viser_url
+
+    def _cleanup() -> None:
+        """Guaranteed cleanup — runs on normal exit, exception, and SIGTERM."""
+        sim = simulator_ref.get("process")
+        if sim is None:
+            return
+        # Detach from atexit so we don't call twice.
+        simulator_ref["process"] = None
+        _stop_simulator_tree(sim)
+
+    # Register cleanup for every exit path: normal return, unhandled
+    # exception, SIGTERM (kill / IDE stop), and SIGINT (Ctrl+C).
+    atexit.register(_cleanup)
+
+    def _signal_handler(signum: int, _frame: object) -> None:
+        print(f"\n收到信号 {signum}，正在退出……", file=sys.stderr)
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _signal_handler)
+    # SIGINT is already handled by the KeyboardInterrupt path, but
+    # registering a handler ensures atexit still fires if something
+    # swallows the exception.
+
+    def local_api(method: str, path: str, payload: dict) -> dict:
+        nonlocal resolved_viser_url
+        if method == "POST" and path == "/api/can-reload-urdf":
+            if args.no_simulator:
+                raise ValueError("外部仿真模式不能从示教器切换 URDF")
+            return {}
+        if method == "POST" and path == "/api/reload-urdf":
+            if args.no_simulator:
+                raise ValueError("外部仿真模式不能从示教器切换 URDF")
+            selected = Path(str(payload.get("path", ""))).resolve()
+            if not selected.is_file() or selected.suffix.lower() != ".urdf":
+                raise ValueError("仿真器返回的 URDF 路径无效")
+            old = simulator_ref["process"]
+            simulator_ref["process"] = None
+            _stop_simulator_tree(old)
+            simulator_ref["process"], resolved_viser_url = _start_simulator(
+                robot=args.robot,
+                urdf=str(selected),
+                simulator_url=args.sim_url,
+                viser_url=args.viser_url,
+            )
+            return {
+                "message": f"已加载 {selected.stem}",
+                "viser_url": resolved_viser_url,
+                "active_path": str(selected),
+            }
+        raise ValueError("未知本地示教器请求")
+
     try:
         if not args.no_simulator:
-            simulator, resolved_viser_url = _start_simulator(
+            simulator_ref["process"], resolved_viser_url = _start_simulator(
                 robot=args.robot,
                 urdf=args.urdf,
                 simulator_url=args.sim_url,
@@ -142,13 +248,12 @@ def main() -> int:
             args.sim_url,
             resolved_viser_url,
             args.open,
+            local_api,
         )
         return 0
     except (OSError, RuntimeError, ValueError) as exc:
         print(f"示教器启动失败：{exc}", file=sys.stderr)
         return 2
-    finally:
-        _stop_simulator(simulator)
 
 
 if __name__ == "__main__":

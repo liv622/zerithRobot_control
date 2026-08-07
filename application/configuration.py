@@ -51,6 +51,12 @@ class ConfigurationService:
             "max_angular_speed_deg_s": float(values["max_angular_speed_deg_s"]),
             "max_joint_speed_deg_s": float(values["max_joint_speed_deg_s"]),
             "command_delay_s": float(values["command_delay_s"]),
+            "trajectory_frequency_hz": float(
+                values.get(
+                    "trajectory_frequency_hz",
+                    self.settings.trajectory_frequency_hz,
+                )
+            ),
         }
         if not all(np.isfinite(value) for value in result.values()):
             raise ValueError("运动参数必须是有限数值")
@@ -64,6 +70,8 @@ class ConfigurationService:
             raise ValueError("最大关节速度必须在 1 到 360 deg/s 之间")
         if not 0.0 <= result["command_delay_s"] <= 60.0:
             raise ValueError("动作间延时必须在 0 到 60 s 之间")
+        if not 50.0 <= result["trajectory_frequency_hz"] <= 1000.0:
+            raise ValueError("示教控制器采样频率必须在 50 到 1000 Hz 之间")
         return result
 
     def save(self, name: str, guide: np.ndarray) -> None:

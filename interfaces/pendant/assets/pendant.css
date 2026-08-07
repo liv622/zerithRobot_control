@@ -58,14 +58,16 @@ input:focus, select:focus { border-color: var(--cyan); }
 .pages { min-width: 0; min-height: 0; height: 100%; padding: 10px 12px; overflow: hidden; }
 .page { display: none; height: 100%; min-height: 0; }
 .page.active { display: grid; grid-template-rows: 58px 1fr; gap: 8px; }
-.page-head { display: flex; align-items: center; justify-content: space-between; }
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: .6vw; }
 .page-head h1 { font-size: 1.55em; margin: 0 0 .15vh; }
 .page-head p { color: var(--muted); margin: 0; }
 .state-tag { border: 1px solid #3d5968; background: #13242d; border-radius: 20px; padding: .6vh 1vw; color: var(--cyan); }
 .panel { min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 7px; padding: .8vh .75vw; background: linear-gradient(180deg, var(--surface-2), var(--surface)); box-shadow: 0 3px 12px #0004; }
 .panel-title { height: 3.4vh; display: flex; align-items: center; justify-content: space-between; font-weight: 800; border-bottom: 1px solid #30424f; margin-bottom: .65vh; }
 .panel-title span { color: var(--muted); font-size: .82em; font-weight: 500; }
-.dashboard { min-height: 0; display: grid; grid-template-columns: 1.45fr 1fr; grid-template-rows: 1.2fr 1fr 1.25fr; gap: .7vh .55vw; }
+.dashboard { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: .7vh .55vw; }
+.home-sub { display: none; min-height: 0; overflow: auto; }
+.home-sub.active { display: block; }
 .hero { grid-row: 1 / 4; }
 .pose-overview { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6vh .4vw; }
 .pose-overview div { background: #0d171e; border: 1px solid #304451; border-radius: 5px; padding: .8vh .7vw; }
@@ -152,7 +154,9 @@ input:focus, select:focus { border-color: var(--cyan); }
 .joint button { height: 5vh; font-size: 1.15em; }
 .aux-list { display: grid; grid-template-columns: 1fr 1fr; gap: .8vh .6vw; }
 .aux-list .joint { grid-template-columns: 8em 1fr 5em 1fr; }
-.program-layout { min-height: 0; display: grid; grid-template-columns: 1fr 27vw; gap: .55vw; }
+.program-layout { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: .55vw; }
+.program-sub { display: none; min-height: 0; overflow: auto; }
+.program-sub.active { display: block; }
 .point-list-panel { display: grid; grid-template-rows: 3.4vh 4.5vh 1fr 4vh; }
 .save-line { display: grid; grid-template-columns: 1fr 7em 12em; gap: .4vw; }
 .teach-table { min-height: 0; display: grid; grid-template-rows: 3vh repeat(7, 1fr); gap: 3px; padding-top: .5vh; }
@@ -173,8 +177,30 @@ input:focus, select:focus { border-color: var(--cyan); }
 .editor-field label { color: var(--muted); }
 .editor-field input { text-align: right; }
 .divider { border-top: 1px solid #30424e; margin: .25vh 0; }
-.config-layout { min-height: 0; display: grid; grid-template-columns: 1fr 1fr 23vw 25vw; gap: .55vw; }
-.frame-panel { display: flex; flex-direction: column; gap: .55vh; overflow: auto; }
+/* 配置页：左侧子导航 + 右侧单面板，UR/AUBO 示教器风格——点选哪个子页面才显示哪个，
+   内容区全宽展示所有数据，面板超高时内部滚动而非挤压/遮盖。 */
+.config-layout { min-height: 0; display: grid; grid-template-columns: 13.5em 1fr; gap: .55vw; }
+.config-nav { display: flex; flex-direction: column; gap: .6vh; padding: 6px; background: #111a22; border: 1px solid var(--line); border-radius: 7px; }
+.config-sub-nav { min-height: 46px; display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; border-color: transparent; color: #aebfca; }
+.config-sub-nav span { color: var(--muted); font-size: 1.15em; width: 1.35em; text-align: center; }
+.config-sub-nav.active { color: white; border-color: #286b86; background: linear-gradient(90deg, #173b4a, #182833); box-shadow: inset 3px 0 var(--cyan); }
+.config-sub-nav.active span { color: var(--cyan); }
+.config-stage { min-height: 0; display: grid; }
+/* Scope the visibility rule to the stage and give it enough specificity to
+   beat the panel layout rules below (.profile-panel/.frame-panel/.urdf-panel).
+   Otherwise their later display:flex declarations make hidden subpages
+   visible and the panels appear nested on the right. */
+.config-stage > .config-sub { display: none; min-height: 0; overflow: auto; }
+.config-stage > .config-sub.active { display: block; }
+.config-stage > .profile-panel.config-sub.active,
+.config-stage > .frame-panel.config-sub.active,
+.config-stage > .urdf-panel.config-sub.active { display: flex; }
+/* URDF 面板与坐标系面板同构：纵向排列、内部滚动，避免撑破固定高度页面。 */
+.urdf-panel { display: flex; flex-direction: column; gap: .55vh; }
+.urdf-panel .wide { margin-top: 0; }
+.urdf-panel .profile-item { grid-template-columns: 1fr 4.5em; }
+.state-line { padding: .5vh .5vw; background: #0e181f; border: 1px solid #30434f; border-radius: 4px; color: #c9dbe3; font-size: .88em; word-break: break-all; }
+.frame-panel { display: flex; flex-direction: column; gap: .55vh; }
 .frame-panel > b { color: #c9dbe3; font-size: .9em; }
 .frame-panel .wide { margin-top: 0; }
 .hardware-panel { display: flex; flex-direction: column; gap: .65vh; }
@@ -192,8 +218,9 @@ input:focus, select:focus { border-color: var(--cyan); }
 .profile-list { min-height: 0; overflow: auto; display: grid; align-content: start; gap: .4vh; }
 .profile-item { display: grid; grid-template-columns: 1fr 4.5em 4.5em; gap: .3vw; align-items: center; padding: .45vh .4vw; background: #0e181f; border: 1px solid #30434f; border-radius: 4px; }
 .profile-item.active { border-color: var(--cyan); }
-.diagnostic-layout { min-height: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: .55vw; }
-.diagnostic-layout article:last-child { grid-column: 1 / 3; }
+.diagnostic-layout { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: .55vw; }
+.diag-sub { display: none; min-height: 0; overflow: auto; }
+.diag-sub.active { display: block; }
 .metric-grid.diagnostic { height: calc(100% - 4vh); align-items: center; }
 .log-panel #diagnosticMessage { background: #0b141a; border: 1px solid #30434f; border-radius: 5px; padding: 1vh; color: #bdd0da; min-height: 9vh; }
 .diagnostic-actions { grid-template-columns: repeat(4, 1fr); }
@@ -209,3 +236,30 @@ input:focus, select:focus { border-color: var(--cyan); }
 .footer-speed button { width: 3.2em; }
 .footer-speed b { min-width: 4em; text-align: center; color: var(--cyan); font-size: 1.15em; }
 .stop { font-weight: 800; min-height: 4.5vh; }
+
+/* ── oscilloscope page ──────────────────────────────────── */
+
+#page-oscilloscope { grid-template-rows: 58px 1fr; }
+
+.detach-btn {
+  background: linear-gradient(#2d4a5e, #1e3645);
+  border-color: #3d6b88;
+  font-size: .82em;
+  padding: .5vh 1vw;
+  white-space: nowrap;
+}
+.detach-btn:hover { border-color: var(--cyan); filter: brightness(1.18); }
+
+.oscilloscope-stage {
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #060b10;
+}
+.oscilloscope-stage iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}

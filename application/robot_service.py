@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Any
+from typing import Any, Protocol
 
 import numpy as np
 from scipy.spatial.transform import Rotation
@@ -12,6 +12,7 @@ from domain import TeachPoint
 from robot_framework.controller import Controller
 from robot_framework.model_protocol import RobotModelProtocol
 from robot_framework.solver import IKSolution
+from urdf import UrdfCatalog
 from .command_dispatcher import CommandDispatcher
 from .configuration import ConfigurationService
 from .continuous_jog import ContinuousJogService
@@ -24,9 +25,18 @@ from .ports import (
     RobotHardware,
     TeachPointProfileRepository,
     TeachPointRepository,
+    UrdfPreferenceRepository,
 )
 from .null_space_motion import NullSpaceMotionService
 from .teach_program import TeachProgramService
+from .urdf_library import UrdfLibraryService
+
+
+class _OscilloscopeSource(Protocol):
+    """Anything that can report statistics and be closed."""
+
+    def statistics(self) -> dict[str, Any]: ...
+    def close(self) -> None: ...
 
 
 class RobotApplicationService:
@@ -43,6 +53,10 @@ class RobotApplicationService:
         hardware: RobotHardware | None = None,
         frame_repository: CoordinateFrameRepository | None = None,
         teach_point_profiles: TeachPointProfileRepository | None = None,
+        urdf_preferences: UrdfPreferenceRepository | None = None,
+        urdf_search_roots: list | None = None,
+        active_urdf_path=None,
+        oscilloscope: _OscilloscopeSource | None = None,
     ) -> None:
         self.model = model
         self.controller = controller
@@ -96,9 +110,26 @@ class RobotApplicationService:
             self.null_space,
             self.displayed_target_values,
             self.set_displayed_target_values,
+            self.move_joint_input,
+            self.move_cartesian_input,
         )
         self.teach_program.motion_blocked = lambda: (
             self.continuous_jog.running or self._solve_lock.locked()
+        )
+        # 实时下发链路由适配层通过 attach_motion_streamer 注入；
+        # 未注入时应用层仍可在纯仿真下运行。
+        self.motion_streamer = None
+        self.joint_guard = None
+        self.oscilloscope = oscilloscope
+        # URDF 选择：目录白名单由基础设施层持久化，运动期间禁止切换。
+        catalog = UrdfCatalog(list(urdf_search_roots or []))
+        self.urdf_library = UrdfLibraryService(
+            catalog,
+            preferences=urdf_preferences,
+            active_path=active_urdf_path,
+            motion_blocked=lambda: (
+                self.teach_program.running or self.continuous_jog.running
+            ),
         )
         self.command_dispatcher = CommandDispatcher(self)
 
@@ -154,6 +185,9 @@ class RobotApplicationService:
                 ),
                 force_recovery=force,
                 multi_start=self.settings.auto_recovery or force,
+                smooth_strength=self.settings.ik_smooth_strength,
+                velocity_limit_dt=self.settings.ik_velocity_limit_dt,
+                manipulability_weight=self.settings.ik_manipulability_weight,
             )
             self.events.scene_changed()
             self.events.solution_changed(solution)
@@ -269,21 +303,13 @@ class RobotApplicationService:
         delta = np.deg2rad(float(delta_degrees))
         if not np.isfinite(delta):
             raise ValueError("关节点动增量无效")
-        self.controller.arm[index] = np.clip(
-            self.controller.arm[index] + delta,
-            self.model.lower[index],
-            self.model.upper[index],
-        )
-        self.controller.guide = self.controller.arm.copy()
-        self.controller.target = self.model.tcp_pose(
-            self.controller.arm,
-            self.controller.aux,
-        )
-        self.controller.solution = None
-        self.events.guide_changed()
-        self.events.target_changed()
-        self.events.scene_changed()
-        self.events.motion_sample(self.controller.arm.copy())
+        target = self.controller.arm.copy()
+        target[index] = np.clip(
+                target[index] + delta,
+                self.model.lower[index],
+                self.model.upper[index],
+            )
+        self.move_joint_input(np.rad2deg(target))
 
     def update_guide(
         self,
@@ -386,6 +412,8 @@ class RobotApplicationService:
         self.configurations.save(name, self.controller.guide)
 
     def load_configuration(self, name: str) -> None:
+        if self.teach_program.running or self.continuous_jog.running:
+            raise ValueError("机器人运动期间不能调用配置文件")
         guide = self.configurations.load(
             name,
             len(self.model.arm_joint_names),
@@ -397,6 +425,7 @@ class RobotApplicationService:
                 self.model.upper,
             )
             self.events.guide_changed()
+        self._apply_sampling_frequency()
         self.events.settings_changed()
 
     def delete_configuration(self, name: str) -> None:
@@ -461,18 +490,40 @@ class RobotApplicationService:
             raise ValueError("零空间目标必须为有限数值")
         if self.teach_program.running or self.continuous_jog.running:
             raise ValueError("机器人运动期间不能执行零空间目标")
-        self.null_space.begin()
-        try:
-            self.null_space.step(float(delta_degrees))
-        finally:
-            self.null_space.end()
+        self.continuous_jog.move_nullspace(float(delta_degrees))
 
     def update_settings(self, **values: Any) -> None:
+        frequency = values.get("trajectory_frequency_hz")
+        frequency_changed = False
+        if frequency is not None:
+            frequency = float(frequency)
+            if not 50.0 <= frequency <= 1000.0:
+                raise ValueError("示教控制器采样频率必须在 50 到 1000 Hz")
+            if self.teach_program.running or self.continuous_jog.running:
+                raise ValueError("机器人运动期间不能修改采样频率")
+            frequency_changed = not np.isclose(
+                frequency,
+                float(self.settings.trajectory_frequency_hz),
+            )
         for name, value in values.items():
             if not hasattr(self.settings, name):
                 raise ValueError(f"未知设置：{name}")
             setattr(self.settings, name, value)
+        if frequency_changed:
+            self._apply_sampling_frequency()
         self.events.settings_changed()
+
+    def _apply_sampling_frequency(self) -> None:
+        frequency = float(self.settings.trajectory_frequency_hz)
+        period_s = 1.0 / frequency
+        # Cartesian and null-space IK use the same per-sample time base as
+        # joint interpolation and hardware delivery.
+        self.settings.ik_velocity_limit_dt = period_s
+        if self.motion_streamer is not None:
+            self.motion_streamer.set_minimum_send_period(period_s)
+        self.hardware.set_control_period(
+            max(1, min(20, int(round(period_s * 1000.0))))
+        )
 
     @staticmethod
     def require_values(command: dict, count: int) -> np.ndarray:
@@ -525,6 +576,11 @@ class RobotApplicationService:
                 "recovery_count": self.settings.recovery_count,
                 "guide_enabled": self.settings.guide_enabled,
                 "guide_strength": self.settings.guide_strength,
+                "ik_smooth_strength": self.settings.ik_smooth_strength,
+                "ik_velocity_limit_dt": self.settings.ik_velocity_limit_dt,
+                "ik_manipulability_weight": (
+                    self.settings.ik_manipulability_weight
+                ),
                 "speed_percent": self.settings.speed_percent,
                 "max_linear_speed_mm_s": (
                     self.settings.max_linear_speed_mm_s
@@ -540,6 +596,8 @@ class RobotApplicationService:
             "configuration": self.configurations.state(),
             "coordinate_frames": self.frames.state(),
             "program_status": self.teach_program.status,
+            "urdf": self.urdf_library.state(),
+            "realtime": self.realtime_state(),
             "teach_program": {
                 "duration": self.settings.point_duration_s,
                 "frequency": self.settings.trajectory_frequency_hz,
@@ -557,7 +615,45 @@ class RobotApplicationService:
     def handle_command(self, command: dict) -> dict:
         return self.command_dispatcher.dispatch(command)
 
+    def attach_motion_streamer(self, streamer, guard=None) -> None:
+        """绑定异步关节下发器与安全门。
+
+        由适配层在装配时调用。应用层只保存引用用于诊断上报和退出清理，
+        真正的下发路径由 ``ApplicationEvents.motion_sample`` 决定，
+        因此应用层不会因为持有下发器而绕过安全门。
+        """
+        self.motion_streamer = streamer
+        self.joint_guard = guard
+        self.motion_streamer.set_minimum_send_period(
+            1.0 / float(self.settings.trajectory_frequency_hz)
+        )
+
+    def realtime_state(self) -> dict[str, Any]:
+        """上报下发链路与安全门状态，供示教器诊断页面显示。"""
+        return {
+            "streaming": (
+                self.motion_streamer.statistics.as_json()
+                if self.motion_streamer is not None
+                else {}
+            ),
+            "safety": (
+                self.joint_guard.state() if self.joint_guard is not None else {}
+            ),
+            "oscilloscope": (
+                self.oscilloscope.statistics()
+                if self.oscilloscope is not None
+                else {}
+            ),
+        }
+
     def close(self) -> None:
+        """按依赖顺序释放资源，避免线程在对象销毁后继续运行。"""
         self.continuous_jog.stop()
         self.teach_program.stop()
+        if self.motion_streamer is not None:
+            # 先排空再关闭，保证已接受的最后一个采样点被送出。
+            self.motion_streamer.drain(timeout_s=0.5)
+            self.motion_streamer.close()
+        if self.oscilloscope is not None:
+            self.oscilloscope.close()
         self.hardware.disconnect()

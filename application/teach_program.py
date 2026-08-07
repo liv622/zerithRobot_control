@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import replace
 
@@ -11,16 +10,24 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 
 from domain import TeachPoint
+from realtime import PacedLoop
 from robot_framework.controller import Controller
 from robot_framework.model_protocol import RobotModelProtocol
+from robot_logging import get_logger
 from trajectory import (
+    CartesianLimits,
     TrajectoryError,
     interpolate_cartesian_segment,
+    joint_limits_from_speed,
+    plan_cartesian_path_profile,
     plan_cartesian_trajectory,
     plan_joint_trajectory,
+    sample_double_s,
 )
 from .contracts import ApplicationEvents, ApplicationSettings
 from .ports import TeachPointRepository
+
+_logger = get_logger("application.teach_program")
 
 
 class TeachProgramService:
@@ -45,6 +52,60 @@ class TeachProgramService:
         self.status = "待机"
         self.display_pose = display_pose or self._default_display_pose
         self.default_target = default_target or self._default_target
+        # Set by the application so a stopped or failed move releases any
+        # real-time resources it acquired.
+        self.on_motion_finished: Callable[[], None] = lambda: None
+
+    def _speed_scale(self, point: TeachPoint) -> float:
+        """Operator speed override for one point, as a fraction in (0, 1]."""
+        percent = float(point.speed_percent)
+        if not np.isfinite(percent) or not 0.0 < percent <= 100.0:
+            raise ValueError("示教点速度百分比必须在 0 到 100 之间")
+        return percent / 100.0
+
+    def _cartesian_limits(self, speed_scale: float) -> CartesianLimits:
+        """Task-space double-S limits for the configured speeds."""
+        return CartesianLimits.from_pendant_units(
+            max_linear_speed_mm_s=(
+                self.settings.max_linear_speed_mm_s * speed_scale
+            ),
+            max_angular_speed_deg_s=(
+                self.settings.max_angular_speed_deg_s * speed_scale
+            ),
+        )
+
+    def _joint_limits(self, speed_scale: float):
+        """Joint-space double-S limits for the configured joint speed."""
+        return joint_limits_from_speed(
+            len(self.model.arm_joint_names),
+            np.deg2rad(self.settings.max_joint_speed_deg_s * speed_scale),
+        )
+
+    def _publish_sample(
+        self,
+        arm: np.ndarray,
+        *,
+        solution=None,
+        velocity: np.ndarray | None = None,
+        acceleration: np.ndarray | None = None,
+    ) -> None:
+        """Publish one accepted motion sample to the scene and to hardware.
+
+        ``save_if_due`` throttles the diagnostic snapshot so the interpolation
+        rate is not also a disk-write rate; the motion event itself is emitted
+        every sample because that is what drives the robot.
+        """
+        with self.controller._arm_lock:
+            self.controller.arm = arm
+        if solution is not None:
+            self.controller.solution = solution
+            self.controller.save_if_due()
+        self.events.scene_changed()
+        self.events.motion_sample(arm.copy())
+        if velocity is not None and acceleration is not None:
+            self.events.motion_state(
+                arm.copy(), velocity.copy(), acceleration.copy()
+            )
 
     def _default_display_pose(self, pose: np.ndarray) -> list[float]:
         xyz = pose[:3, 3]
@@ -84,11 +145,14 @@ class TeachProgramService:
         self.set_status(f"已保存 {point.name} ({point.motion_type})")
         return point
 
-    def _wait_for_sample(self, started: float, timestamp: float) -> bool:
-        remaining = started + timestamp - time.monotonic()
-        return remaining > 0 and self._cancel.wait(remaining)
-
     def _play_movl(self, point: TeachPoint, *, immediate: bool = False) -> bool:
+        """Execute a MOVL with a double-S path profile.
+
+        The profile bounds path velocity, acceleration and jerk, so
+        ``point_duration_s`` acts as a minimum cycle time rather than as the
+        thing that sets the speed.  A move that cannot be completed that quickly
+        within the configured limits is stretched instead of over-speeding.
+        """
         values = np.asarray(point.values, dtype=float)
         target = self.default_target(values)
         self.set_status(f"{point.name} MOVL 预检中…")
@@ -96,37 +160,36 @@ class TeachProgramService:
             self.controller.arm,
             self.controller.aux,
         )
-        speed_scale = point.speed_percent / 100.0
-        distance_mm = float(
-            np.linalg.norm(target[:3, 3] - current[:3, 3]) * 1000.0
+        speed_scale = self._speed_scale(point)
+        limits = self._cartesian_limits(speed_scale)
+        minimum_duration = (
+            0.2 if immediate else self.settings.point_duration_s / speed_scale
         )
-        angle_deg = float(
-            np.rad2deg(
-                np.linalg.norm(
-                    Rotation.from_matrix(
-                        target[:3, :3] @ current[:3, :3].T
-                    ).as_rotvec()
-                )
-            )
-        )
-        duration = max(
-            0.2 if immediate else self.settings.point_duration_s / speed_scale,
-            distance_mm
-            / (self.settings.max_linear_speed_mm_s * speed_scale),
-            angle_deg
-            / (self.settings.max_angular_speed_deg_s * speed_scale),
-        )
+        frequency = self.settings.trajectory_frequency_hz
+        loop = PacedLoop(frequency, self._cancel, name=f"MOVL {point.name}")
+
         self.set_status(f"执行 {point.name} MOVL")
-        started = time.monotonic()
         if immediate:
-            # For an operator-initiated single-point move, solve and execute
-            # each sample in sequence. This uses the preceding arm state as
-            # the seed and avoids blocking on a full-trajectory IK preflight.
-            count = max(2, int(np.ceil(duration * self.settings.trajectory_frequency_hz)) + 1)
-            poses = interpolate_cartesian_segment(current, target, count)
-            times = np.linspace(0.0, duration, len(poses))
+            # For an operator-initiated single point, solve each sample against
+            # the preceding arm state instead of preflighting the whole path, so
+            # the robot starts moving without a long up-front IK pause.
+            profile, _, _ = plan_cartesian_path_profile(
+                [current, target],
+                limits,
+                minimum_duration_s=minimum_duration,
+            )
+            samples = sample_double_s(profile, frequency)
+            poses = interpolate_cartesian_segment(
+                current,
+                target,
+                len(samples),
+                progress=np.asarray(
+                    [float(np.clip(item.position[0], 0.0, 1.0)) for item in samples]
+                ),
+            )
             arm = self.controller.arm.copy()
-            for timestamp, pose in zip(times[1:], poses[1:]):
+            loop.reset()
+            for sample, pose in zip(samples[1:], poses[1:]):
                 if self._cancel.is_set():
                     return False
                 solution = self.controller.solver.solve(
@@ -142,13 +205,9 @@ class TeachProgramService:
                     or solution.orientation_error_rad > np.deg2rad(1.0)
                 ):
                     raise TrajectoryError("连续 IK 无法保持 MOVL 轨迹")
-                if self._wait_for_sample(started, float(timestamp)):
+                if loop.wait_until(sample.time_s):
                     return False
-                self.controller.arm = solution.arm.copy()
-                self.controller.solution = solution
-                self.controller.save()
-                self.events.scene_changed()
-                self.events.motion_sample(self.controller.arm.copy())
+                self._publish_sample(solution.arm.copy(), solution=solution)
                 arm = solution.arm
         else:
             trajectory = plan_cartesian_trajectory(
@@ -156,56 +215,82 @@ class TeachProgramService:
                 [current, target],
                 self.controller.arm,
                 self.controller.aux.copy(),
-                duration,
-                self.settings.trajectory_frequency_hz,
+                minimum_duration,
+                frequency,
+                limits=limits,
             )
+            loop.reset()
             for timestamp, solution in zip(trajectory.times, trajectory.solutions):
-                if self._cancel.is_set() or self._wait_for_sample(
-                    started,
-                    float(timestamp),
-                ):
+                if self._cancel.is_set() or loop.wait_until(float(timestamp)):
                     return False
-                self.controller.arm = solution.arm.copy()
-                self.controller.solution = solution
-                self.controller.save()
-                self.events.scene_changed()
-                self.events.motion_sample(self.controller.arm.copy())
+                self._publish_sample(solution.arm.copy(), solution=solution)
+        # Flush the final snapshot that the throttle may have skipped.
+        self.controller.save_if_due(force=True)
         self.controller.target = target
         self.events.target_changed()
+        self._log_loop(loop, point, "MOVL")
         return True
 
-    def _play_movj(self, point: TeachPoint, *, immediate: bool = False) -> bool:
-        target_arm = np.deg2rad(np.asarray(point.values, dtype=float))
-        speed_scale = point.speed_percent / 100.0
-        required_duration = float(
-            np.max(np.abs(target_arm - self.controller.arm))
-            / np.deg2rad(
-                self.settings.max_joint_speed_deg_s * speed_scale
+    def _log_loop(self, loop: PacedLoop, point: TeachPoint, motion: str) -> None:
+        statistics = loop.statistics
+        if statistics.overruns:
+            _logger.warning(
+                "%s %s 有 %d/%d 个插补点滞后，最大 %.1f ms",
+                point.name,
+                motion,
+                statistics.overruns,
+                statistics.samples,
+                statistics.max_lateness_s * 1000.0,
             )
-        )
+        else:
+            _logger.debug(
+                "%s %s 完成：%d 点，最大抖动 %.2f ms",
+                point.name,
+                motion,
+                statistics.samples,
+                statistics.max_jitter_s * 1000.0,
+            )
+
+    def _play_movj(self, point: TeachPoint, *, immediate: bool = False) -> bool:
+        """Execute a MOVJ with a time-synchronised double-S joint profile.
+
+        All joints share one duration, so the arm follows a straight line in
+        joint space and every axis stops at the same instant.  The planner
+        stretches the move when the configured joint speed cannot cover the
+        distance in the requested cycle time.
+        """
+        target_arm = np.deg2rad(np.asarray(point.values, dtype=float))
+        speed_scale = self._speed_scale(point)
+        frequency = self.settings.trajectory_frequency_hz
         trajectory = plan_joint_trajectory(
             self.controller.arm,
             target_arm,
             self.model.lower,
             self.model.upper,
-            max(
-                0.2 if immediate else self.settings.point_duration_s / speed_scale,
-                required_duration,
-            ),
-            self.settings.trajectory_frequency_hz,
+            0.2 if immediate else self.settings.point_duration_s / speed_scale,
+            frequency,
+            limits=self._joint_limits(speed_scale),
         )
         self.set_status(f"执行 {point.name} MOVJ")
-        started = time.monotonic()
-        for timestamp, arm in zip(trajectory.times, trajectory.arms):
-            if self._cancel.is_set() or self._wait_for_sample(
-                started,
-                float(timestamp),
-            ):
+        loop = PacedLoop(frequency, self._cancel, name=f"MOVJ {point.name}")
+        loop.reset()
+        for timestamp, arm, velocity, acceleration in zip(
+            trajectory.times,
+            trajectory.arms,
+            trajectory.velocities,
+            trajectory.accelerations,
+        ):
+            if self._cancel.is_set() or loop.wait_until(float(timestamp)):
                 return False
-            self.controller.arm = arm.copy()
+            # MOVJ commands joints directly, so there is no IK solution to
+            # publish; clearing it keeps the diagnostics from showing a stale
+            # Cartesian error for a joint-space move.
             self.controller.solution = None
-            self.events.scene_changed()
-            self.events.motion_sample(self.controller.arm.copy())
+            self._publish_sample(
+                arm.copy(),
+                velocity=velocity,
+                acceleration=acceleration,
+            )
         self.controller.guide = self.controller.arm.copy()
         self.controller.target = self.model.tcp_pose(
             self.controller.arm,
@@ -213,6 +298,7 @@ class TeachProgramService:
         )
         self.events.guide_changed()
         self.events.target_changed()
+        self._log_loop(loop, point, "MOVJ")
         return True
 
     def _run(self, loop: bool) -> None:
